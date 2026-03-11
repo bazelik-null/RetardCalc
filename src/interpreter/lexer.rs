@@ -1,7 +1,7 @@
 use crate::interpreter::tokens;
 use regex::Regex;
 
-pub fn tokenize(string: String) -> Option<Vec<tokens::Token>> {
+pub fn tokenize(string: String) -> Result<Vec<tokens::Token>, &'static str> {
     // Create a token vector
     let mut tokens: Vec<tokens::Token> = Vec::with_capacity(string.len());
 
@@ -15,7 +15,7 @@ pub fn tokenize(string: String) -> Option<Vec<tokens::Token>> {
 
     // Validate string
     if string.is_empty() || string.chars().all(char::is_whitespace) {
-        return None;
+        return Err("String is empty");
     }
 
     // Parse each token
@@ -23,7 +23,8 @@ pub fn tokenize(string: String) -> Option<Vec<tokens::Token>> {
         let token: tokens::Token = parse_token(&lexeme);
         tokens.push(token);
     }
-    Some(tokens)
+
+    Ok(tokens)
 }
 
 fn parse_token(lexeme: &str) -> tokens::Token {

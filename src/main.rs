@@ -1,6 +1,7 @@
 pub mod interpreter;
 
 use interpreter::tokens;
+use std::error::Error;
 use std::io;
 use std::io::Write;
 
@@ -27,30 +28,27 @@ fn main() {
                     break;
                 }
 
-                calculate(trimmed.to_string());
+                let code = calculate(trimmed.to_string());
+                match code {
+                    Ok(result) => {
+                        println!("{}", result)
+                    }
+                    Err(err) => {
+                        eprintln!("[ERROR]: {}", err)
+                    }
+                }
             }
             Err(error) => println!("[ERROR]: {error}"),
         }
     }
 }
 
-fn calculate(input: String) {
+fn calculate(input: String) -> Result<f64, Box<dyn Error>> {
     // Parse expression
-    let tokens: Vec<tokens::Token> = match interpreter::lexer::tokenize(input) {
-        Some(tokens) => tokens,
-        None => {
-            eprintln!("[ERROR]: No tokens found");
-            return;
-        }
-    };
+    let tokens: Vec<tokens::Token> = interpreter::lexer::tokenize(input)?;
 
     // Evaluate expression
-    let eval: f64 = match interpreter::evaluator::eval(&tokens) {
-        Some(eval) => eval,
-        None => {
-            eprintln!("[ERROR]: Invalid expression");
-            return;
-        }
-    };
-    println!("{}", eval);
+    let eval: f64 = interpreter::evaluator::eval(&tokens)?;
+
+    Ok(eval)
 }

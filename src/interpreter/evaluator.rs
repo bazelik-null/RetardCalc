@@ -1,8 +1,8 @@
 use crate::interpreter::tokens;
 
-pub fn eval(tokens: &Vec<tokens::Token>) -> Option<f64> {
+pub fn eval(tokens: &Vec<tokens::Token>) -> Result<f64, &'static str> {
     if tokens.is_empty() {
-        return None;
+        return Err("No tokens found");
     }
 
     let mut result: f64 = 0.0;
@@ -39,7 +39,7 @@ pub fn eval(tokens: &Vec<tokens::Token>) -> Option<f64> {
 
     // Apply the last operation to the last number
     result = apply_operation(result, previous_token.value.unwrap_or(0.0), operation);
-    Some(result)
+    Ok(result)
 }
 
 fn apply_operation(result: f64, value: f64, operation: tokens::TokenType) -> f64 {

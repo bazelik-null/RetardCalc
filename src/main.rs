@@ -1,5 +1,6 @@
 pub mod interpreter;
 
+use interpreter::tokens;
 use std::io;
 use std::io::Write;
 
@@ -12,7 +13,7 @@ fn main() {
         print!(">>> "); // Input indicator
         io::stdout().flush().unwrap(); // Ensure prompt displays immediately
 
-        let mut input = String::new();
+        let mut input: String = String::new();
         match io::stdin().read_line(&mut input) {
             Ok(..) => {
                 let trimmed = input.trim();
@@ -35,14 +36,13 @@ fn main() {
 
 fn calculate(input: String) {
     // Parse expression
-    let tokens =
-        match interpreter::lexer::tokenize(input) {
-            Some(tokens) => tokens,
-            None => {
-                eprintln!("[ERROR]: No tokens found");
-                return;
-            }
-        };
+    let tokens: Vec<tokens::Token> = match interpreter::lexer::tokenize(input) {
+        Some(tokens) => tokens,
+        None => {
+            eprintln!("[ERROR]: No tokens found");
+            return;
+        }
+    };
 
     // Evaluate expression
     let eval: f64 = match interpreter::evaluator::eval(&tokens) {

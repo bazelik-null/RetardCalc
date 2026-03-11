@@ -3,7 +3,7 @@
 </div>
 
 # Introduction
-**RetardCalc** is my first rust project which i made just for fun. Don't expect much from it. <br>
+**RetardCalc** is my first rust project which I made just for fun. Don't expect much from it. <br>
 Also, im planning to implement AST in the future!!!
 
 # Usage

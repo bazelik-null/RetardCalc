@@ -48,6 +48,10 @@ fn handle_input_cycle(state: &mut AppState, input_buffer: &mut String) -> bool {
             print_help();
             return true;
         }
+        Command::Func => {
+            print_func();
+            return true;
+        }
         Command::File(file_path) => {
             match eval_file(file_path.as_str(), state.is_debug) {
                 Ok(_) => {} // eval_file prints result.
@@ -82,12 +86,44 @@ fn print_prompt() {
 }
 
 fn print_help() {
-    println!("Available commands:");
+    println!("Available commands\n");
     println!("  help     - Show this help message.");
+    println!("  func     - Show all math functions.");
     println!("  file     - Evaluate passed file.");
     println!("  debug    - Toggle debug mode.");
-    println!("  exit     - Exit.");
-    println!();
-    println!("Enter any mathematical expression to evaluate it.");
-    println!();
+    println!("  exit     - Exit.\n");
+
+    println!("Enter any mathematical expression to evaluate it.\n");
+}
+
+fn print_func() {
+    println!("Available Functions:\n");
+
+    println!("Arithmetic Operations:");
+    println!("  Addition:       x + y");
+    println!("  Subtraction:    x - y");
+    println!("  Multiplication: x * y");
+    println!("  Division:       x / y\n");
+
+    println!("Exponent and Logarithmic Operations:");
+    println!("  Exponentiation:    x ^ y");
+    println!("  Square root:       sqrt x");
+    println!("  Logarithm:         x log y (where x is base, y is argument)");
+    println!("  Natural logarithm: ln x\n");
+
+    println!("Trigonometric Functions:");
+    println!("  Cosine:     cos x");
+    println!("  Sine:       sin x");
+    println!("  Tangent:    tan x");
+    println!("  Arccosine:  acos x");
+    println!("  Arcsine:    asin x");
+    println!("  Arctangent: atan x\n");
+
+    println!("Miscellaneous Operations:");
+    println!("  Negation:           -x");
+    println!("  Modulo (remainder): x % y");
+    println!("  Absolute value:     abs x");
+    println!("  Rounding:           round x\n");
+
+    println!("  Unknown: Default value (invalid)\n");
 }

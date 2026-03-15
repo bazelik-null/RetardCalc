@@ -12,8 +12,8 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, String> {
     // Remove whitespaces
     let cleaned = input.replace(char::is_whitespace, "");
 
-    // Regex to capture numbers and operators
-    let regex = Regex::new(r"(\d+\.?\d*|[+\-*/()=])").unwrap();
+    // Regex to capture numbers, operators and words
+    let regex = Regex::new(r"(\d+\.?\d|[+\-/()=^]|[a-zA-Z_]+|\d)").unwrap();
 
     let mut tokens: Vec<Token> = regex
         .find_iter(&cleaned)
@@ -32,12 +32,38 @@ fn parse_token(lexeme: &str) -> Result<Token, String> {
         return Ok(Token::Number(value));
     }
 
+    // Match constants
+    match lexeme {
+        "pi" => return Ok(Token::Number(std::f64::consts::PI)),
+        "e" => return Ok(Token::Number(std::f64::consts::E)),
+        "g" => return Ok(Token::Number(std::f64::consts::GOLDEN_RATIO)),
+        _ => {}
+    };
+
     // Parse as operator
     let operator = match lexeme {
+        // Arithmetic
         "+" => OperatorType::Add,
         "-" => OperatorType::Subtract,
         "*" => OperatorType::Multiply,
         "/" => OperatorType::Divide,
+        // Exponents
+        "^" => OperatorType::Exponent,
+        "sqrt" => OperatorType::Sqrt,
+        "log" => OperatorType::Log,
+        "ln" => OperatorType::Ln,
+        // Trigonometry
+        "cos" => OperatorType::Cos,
+        "sin" => OperatorType::Sin,
+        "tan" => OperatorType::Tan,
+        "acos" => OperatorType::Acos,
+        "asin" => OperatorType::Asin,
+        "atan" => OperatorType::Atan,
+        // Misc
+        "mod" => OperatorType::Modulo,
+        "abs" => OperatorType::Abs,
+        "round" => OperatorType::Round,
+
         _ => return Err(format!("Unknown token: '{}'", lexeme)),
     };
 

@@ -1,3 +1,4 @@
+use std::ops::Neg;
 use crate::interpreter::ast::node::Node;
 use crate::interpreter::operators::OperatorType;
 
@@ -33,7 +34,19 @@ fn eval_node(node: &Node) -> Result<f64, String> {
 
 fn apply_unary_operation(value: f64, operation: &OperatorType) -> Result<f64, String> {
     match operation {
-        OperatorType::Negate => Ok(-value),
+        OperatorType::Sqrt => Ok(value.sqrt()),
+        OperatorType::Ln => Ok(value.ln()),
+
+        OperatorType::Cos => Ok(value.cos()),
+        OperatorType::Sin => Ok(value.sin()),
+        OperatorType::Tan => Ok(value.tan()),
+        OperatorType::Acos => Ok(value.acos()),
+        OperatorType::Asin => Ok(value.asin()),
+        OperatorType::Atan => Ok(value.atan()),
+
+        OperatorType::Negate => Ok(value.neg()),
+        OperatorType::Abs => Ok(value.abs()),
+        OperatorType::Round => Ok(value.round()),
         _ => Err(format!("Invalid unary operator: {:?}", operation)),
     }
 }
@@ -43,13 +56,12 @@ fn apply_binary_operation(left: f64, right: f64, operation: &OperatorType) -> Re
         OperatorType::Add => Ok(left + right),
         OperatorType::Subtract => Ok(left - right),
         OperatorType::Multiply => Ok(left * right),
-        OperatorType::Divide => {
-            if right == 0.0 {
-                Err("Division by zero".to_string())
-            } else {
-                Ok(left / right)
-            }
-        }
+        OperatorType::Divide => Ok(left / right),
+
+        OperatorType::Exponent => Ok(left.powf(right)),
+        OperatorType::Log => Ok(right.log(left)),
+
+        OperatorType::Modulo => Ok(left.rem_euclid(right)),
         _ => Err(format!("Invalid binary operator: {:?}", operation)),
     }
 }

@@ -3,6 +3,7 @@ pub enum Command {
     Debug,
     File(String),
     Help,
+    Func,
     Exit,
     Unknown,
 }
@@ -21,6 +22,7 @@ impl Command {
                 }
             }
             Some("help") => Command::Help,
+            Some("func") => Command::Func,
             Some("exit") => Command::Exit,
             _ => Command::Unknown,
         }

@@ -107,23 +107,23 @@ fn print_func() {
 
     println!("Exponent and Logarithmic Operations:");
     println!("  Exponentiation:    x ^ y");
-    println!("  Square root:       sqrt x");
-    println!("  Logarithm:         x log y (where x is base, y is argument)");
-    println!("  Natural logarithm: ln x\n");
+    println!("  Square root:       sqrt(x)");
+    println!("  Logarithm:         x log(y) [where x is base, y is argument]");
+    println!("  Natural logarithm: ln(x)\n");
 
     println!("Trigonometric Functions:");
-    println!("  Cosine:     cos x");
-    println!("  Sine:       sin x");
-    println!("  Tangent:    tan x");
-    println!("  Arccosine:  acos x");
-    println!("  Arcsine:    asin x");
-    println!("  Arctangent: atan x\n");
+    println!("  Cosine:     cos(x)");
+    println!("  Sine:       sin(x)");
+    println!("  Tangent:    tan(x)");
+    println!("  Arccosine:  acos(x)");
+    println!("  Arcsine:    asin(x)");
+    println!("  Arctangent: atan(x)\n");
 
     println!("Miscellaneous Operations:");
     println!("  Negation:           -x");
     println!("  Modulo (remainder): x % y");
-    println!("  Absolute value:     abs x");
-    println!("  Rounding:           round x\n");
+    println!("  Absolute value:     abs(x)");
+    println!("  Rounding:           round(x)\n");
 
-    println!("  Unknown: Default value (invalid)\n");
+    println!("  Unknown: Default value [invalid]\n");
 }

@@ -132,6 +132,7 @@ impl Parser {
     /// Handles numbers and parentheses
     fn parse_primary(&mut self) -> Result<Node, String> {
         match self.peek() {
+            // Handle numbers
             Some(Token::Number(value)) => {
                 // Extract the numeric value
                 let value = *value;
@@ -141,6 +142,24 @@ impl Parser {
 
                 // Return the parsed number node
                 Ok(Node::Number(value))
+            }
+            // Handle brackets
+            Some(Token::Operator(OperatorType::LBracket)) => {
+                // Consume the opening bracket
+                self.advance();
+
+                // Parse the expression inside the brackets
+                let expr = self.parse_expression()?;
+
+                // Expect a closing bracket
+                match self.peek() {
+                    Some(Token::Operator(OperatorType::RBracket)) => {
+                        // Consume the closing bracket
+                        self.advance();
+                        Ok(expr)
+                    }
+                    _ => Err("Expected closing bracket ')'".to_string()),
+                }
             }
             Some(Token::Operator(_)) => {
                 Err("Unexpected operator in primary expression".to_string())

@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub enum OperatorType {
     // Arithmetic
     Add,      // x + y
@@ -10,20 +10,23 @@ pub enum OperatorType {
     // Exponents
     Exponent, // x ^ y
     Sqrt,     // √ x
-    Log,      // x(base) log y(arg)
-    Ln,       // ln x
+    Log,      // x log(y) [where x is base, y is argument]
+    Ln,       // ln(x)
     // Trigonometry
-    Cos,  // cos x
-    Sin,  // sin x
-    Tan,  // tan x
-    Acos, // arccos x
-    Asin, // arcsin x
-    Atan, // arctan x
+    Cos,  // cos(x)
+    Sin,  // sin(x)
+    Tan,  // tan(x)
+    Acos, // arccos(x)
+    Asin, // arcsin(x)
+    Atan, // arctan(x)
     // Misc
     Negate, // -x
     Modulo, // x % y
-    Abs,    // abs x
-    Round,  // round x
+    Abs,    // abs(x)
+    Round,  // round(x)
+    // Brackets
+    LBracket, // (
+    RBracket, // )
 
     #[default]
     Unknown,
@@ -91,6 +94,9 @@ impl fmt::Display for OperatorType {
             OperatorType::Modulo => write!(f, "%"),
             OperatorType::Abs => write!(f, "abs"),
             OperatorType::Round => write!(f, "round"),
+            // Brackets
+            OperatorType::LBracket => write!(f, "("),
+            OperatorType::RBracket => write!(f, ")"),
 
             OperatorType::Unknown => write!(f, "?"),
         }

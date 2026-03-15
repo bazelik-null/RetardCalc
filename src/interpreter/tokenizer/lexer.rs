@@ -1,45 +1,59 @@
 use crate::interpreter::operators::OperatorType;
 use crate::interpreter::tokenizer::token::Token;
+use once_cell::sync::Lazy;
 use regex::Regex;
+
+static TOKENIZER_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(\d+\.\d+|\d+|[a-zA-Z_]+|[+\-*/()=^])").unwrap());
 
 /// Builds a token array from raw str. Needed for AST construction.
 pub fn tokenize(input: &str) -> Result<Vec<Token>, String> {
-    // Validate input
     if input.trim().is_empty() {
         return Err("Input string is empty".to_string());
     }
 
-    // Remove whitespaces
-    let cleaned = input.replace(char::is_whitespace, "");
+    let cleaned = input.replace(char::is_whitespace, "").to_lowercase();
+    let tokens: Vec<Token> = Vec::new();
 
-    // Regex to capture numbers, operators and words
-    let regex = Regex::new(r"(\d+\.\d+|\d+|[a-zA-Z_]+|[+\-*/()=^])").unwrap();
-
-    let mut tokens: Vec<Token> = regex
+    let tokens: Vec<Token> = TOKENIZER_REGEX
         .find_iter(&cleaned)
-        .map(|m| parse_token(m.as_str())) // Parse tokens
+        .map(|m| parse_token(m.as_str(), &tokens)) // Parse tokens
         .collect::<Result<Vec<Token>, String>>()?;
-
-    // Post-process to convert binary operators to unary where appropriate
-    tokens = convert_unary_operators(tokens)?;
 
     Ok(tokens)
 }
 
-fn parse_token(lexeme: &str) -> Result<Token, String> {
-    // Try parsing as number first
+fn parse_token(lexeme: &str, preceding_tokens: &[Token]) -> Result<Token, String> {
+    // Try parsing as number
     if let Ok(value) = lexeme.parse::<f64>() {
         return Ok(Token::Number(value));
     }
 
-    // Match constants
-    match lexeme {
-        "pi" => return Ok(Token::Number(std::f64::consts::PI)),
-        "e" => return Ok(Token::Number(std::f64::consts::E)),
-        _ => {}
-    };
+    // Try parsing as constant
+    if let Some(value) = parse_constant(lexeme) {
+        return Ok(Token::Number(value));
+    }
 
     // Parse as operator
+    let mut operator = parse_operator(lexeme)?;
+
+    // Convert to unary if needed
+    if operator == OperatorType::Subtract && should_be_unary(preceding_tokens) {
+        operator = OperatorType::Negate;
+    }
+
+    Ok(Token::Operator(operator))
+}
+
+fn parse_constant(lexeme: &str) -> Option<f64> {
+    match lexeme {
+        "pi" => Some(std::f64::consts::PI),
+        "e" => Some(std::f64::consts::E),
+        _ => None,
+    }
+}
+
+fn parse_operator(lexeme: &str) -> Result<OperatorType, String> {
     let operator = match lexeme {
         // Arithmetic
         "+" => OperatorType::Add,
@@ -62,48 +76,27 @@ fn parse_token(lexeme: &str) -> Result<Token, String> {
         "mod" => OperatorType::Modulo,
         "abs" => OperatorType::Abs,
         "round" => OperatorType::Round,
+        // Brackets
+        "(" => OperatorType::LBracket,
+        ")" => OperatorType::RBracket,
 
         _ => return Err(format!("Unknown token: '{}'", lexeme)),
     };
-
-    Ok(Token::Operator(operator))
+    Ok(operator)
 }
 
 /// Converts binary operators to unary operators where needed.
 /// A minus/plus is unary if it appears:
 /// - At the start of the expression
 /// - After another operator
-fn convert_unary_operators(tokens: Vec<Token>) -> Result<Vec<Token>, String> {
-    let mut result = Vec::new();
-
-    for (i, token) in tokens.into_iter().enumerate() {
-        match token {
-            Token::Operator(OperatorType::Subtract) => {
-                // Check if this should be a unary minus
-                if should_be_unary(i, &result) {
-                    result.push(Token::Operator(OperatorType::Negate));
-                } else {
-                    result.push(token);
-                }
-            }
-            _ => result.push(token),
-        }
-    }
-
-    Ok(result)
-}
-
-/// Determines if an operator at position `index` should be treated as unary.
-fn should_be_unary(index: usize, preceding_tokens: &[Token]) -> bool {
+fn should_be_unary(preceding_tokens: &[Token]) -> bool {
     // At the start of the expression
-    if index == 0 || preceding_tokens.is_empty() {
+    if preceding_tokens.is_empty() {
         return true;
     }
 
-    // Check the last token in the preceding tokens
     match &preceding_tokens[preceding_tokens.len() - 1] {
-        // After another operator
-        Token::Operator(op) => !matches!(op, OperatorType::Unknown),
+        Token::Operator(operator) => !operator.is_unary(),
         _ => false,
     }
 }

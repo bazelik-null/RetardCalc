@@ -20,23 +20,23 @@ This project uses Abstract Syntax Tree (AST) to evaluate expressions. Proccess i
 
 ### Exponent and Logarithmic Operations
 - **Exponentiation:** `x ^ y`
-- **Square root:** `sqrt x`
-- **Logarithm:** `x log y` (where x is base, y is argument)
-- **Natural logarithm:** `ln x`
+- **Square root:** `sqrt(x)`
+- **Logarithm:** `x log(y)` (where x is base, y is argument)
+- **Natural logarithm:** `ln(x)`
 
 ### Trigonometric Functions
-- **Cosine:** `cos x`
-- **Sine:** `sin x`
-- **Tangent:** `tan x`
-- **Arccosine:** `acos x`
-- **Arcsine:** `asin x`
-- **Arctangent:** `atan x`
+- **Cosine:** `cos(x)`
+- **Sine:** `sin(x)`
+- **Tangent:** `tan(x)`
+- **Arccosine:** `acos(x)`
+- **Arcsine:** `asin(x)`
+- **Arctangent:** `atan(x)`
 
 ### Miscellaneous Operations
 - **Negation:** `-x`
 - **Modulo (remainder):** `x % y`
-- **Absolute value:** `abs x`
-- **Rounding:** `round x`
+- **Absolute value:** `abs(x)`
+- **Rounding:** `round(x)`
 
 ### Unknown
 - **Default value:** Invalid input

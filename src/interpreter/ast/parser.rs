@@ -1,41 +1,62 @@
 use crate::interpreter::ast::node::Node;
-use crate::interpreter::operators::OperatorType;
+use crate::interpreter::operators::{OperatorType, Precedence};
 use crate::interpreter::tokenizer::token::Token;
 
-/// A recursive descent parser that converts tokens into an abstract syntax tree (AST).
-/// Implements operator precedence parsing to correctly handle order of operations.
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
 }
 
+/* Parser flow:
+ * parse()                 [Entry point]
+ * * parse_precedence()    [Handles binary operators with precedence]
+ * * * parse_primary()     [Handles unary/function/atoms]
+ * * * * parse_function()  [Function calls like cos(x)]
+ * * * * parse_unary()     [Unary operators like -x]
+ * * * * parse_atom()      [Numbers and parentheses]
+ */
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Parser { tokens, pos: 0 }
+        Self { tokens, pos: 0 }
     }
 
     /// Entry point for parsing. Initiates parsing from the lowest precedence level.
     pub fn parse(&mut self) -> Result<Node, String> {
-        self.parse_expression()
+        let expr = self.parse_precedence(Precedence::Additive)?;
+        if self.pos < self.tokens.len() {
+            return Err(format!("Unexpected token at position {}", self.pos));
+        }
+
+        Ok(expr)
     }
 
-    /// Handles lowest precedence (addition, subtraction)
-    fn parse_expression(&mut self) -> Result<Node, String> {
-        // Parse left side
-        let mut left = self.parse_term()?;
+    fn parse_precedence(&mut self, min_precedence: Precedence) -> Result<Node, String> {
+        // Parse left value
+        let mut left = self.parse_primary()?;
 
-        // Keep parsing additive operators and their right operands
+        // Parse binary operators as long as they have sufficient precedence
         while let Some(op) = self.peek_operator() {
-            // Stop if the next operator is not additive (e.g., it's multiplicative)
-            if !op.is_additive() {
+            // Get the precedence of the current operator, or stop if it's not a binary operator
+            let Some(precedence) = op.precedence() else {
+                break;
+            };
+
+            if precedence < min_precedence {
                 break;
             }
 
-            // Consume the operator
+            // Consume operator
             self.advance();
 
-            // Parse right operand
-            let right = self.parse_term()?;
+            // Determine the minimum precedence for the right operand
+            let next_min = if op.is_right_associative() {
+                precedence
+            } else {
+                Precedence::Exponent
+            };
+
+            // Parse right operands with calculated minimum precedence
+            let right = self.parse_precedence(next_min)?;
 
             // Build binary expression node
             left = Node::BinaryExpr {
@@ -48,133 +69,94 @@ impl Parser {
         Ok(left)
     }
 
-    /// Handles medium precedence (multiplication, division)
-    fn parse_term(&mut self) -> Result<Node, String> {
-        // Parse left operand
-        let mut left = self.parse_unary()?;
-
-        // Keep parsing multiplicative operators and their right operands
-        while let Some(op) = self.peek_operator() {
-            // Stop if the next operator is not multiplicative
-            if !op.is_multiplicative() {
-                break;
-            }
-
-            // Consume the operator
-            self.advance();
-
-            // Parse right operand
-            let right = self.parse_exponent()?;
-
-            // Build binary expression node
-            left = Node::BinaryExpr {
-                op,
-                lvalue: Box::new(left),
-                rvalue: Box::new(right),
-            };
-        }
-
-        Ok(left)
-    }
-
-    /// Handles high precedence (exponentiation)
-    fn parse_exponent(&mut self) -> Result<Node, String> {
-        // Parse left operand
-        let mut left = self.parse_unary()?;
-
-        // Keep parsing exponentiation operators and their right operands
-        while let Some(op) = self.peek_operator() {
-            // Stop if the next operator is not exponentiation
-            if !op.is_exponentiation() {
-                break;
-            }
-
-            // Consume the operator
-            self.advance();
-
-            // Parse right operand
-            let right = self.parse_exponent()?;
-
-            // Build binary expression node
-            left = Node::BinaryExpr {
-                op,
-                lvalue: Box::new(left),
-                rvalue: Box::new(right),
-            };
-        }
-
-        Ok(left)
-    }
-
-    /// Handles unary operators ( -(int), +(int) )
-    fn parse_unary(&mut self) -> Result<Node, String> {
-        // Check if the current token is a unary operator
-        if let Some(op) = self.peek_operator()
-            && op.is_unary()
-        {
-            // Consume the unary operator
-            self.advance();
-
-            // Recursively parse the operand
-            let child = self.parse_unary()?;
-
-            // Build unary expression node
-            return Ok(Node::UnaryExpr {
-                op,
-                child: Box::new(child),
-            });
-        }
-
-        // Not a unary operator, so parse the next level
-        self.parse_primary()
-    }
-
-    /// Handles numbers and parentheses
     fn parse_primary(&mut self) -> Result<Node, String> {
-        match self.peek() {
-            // Handle numbers
-            Some(Token::Number(value)) => {
-                // Extract the numeric value
-                let value = *value;
+        if let Some(op) = self.peek_operator() {
+            if op.is_function() {
+                return self.parse_function(op);
+            }
+            if op.is_unary() {
+                return self.parse_unary(op);
+            }
+        }
 
-                // Consume the number token
+        self.parse_atom()
+    }
+
+    fn parse_function(&mut self, op: OperatorType) -> Result<Node, String> {
+        // Consume function operator
+        self.advance();
+
+        // Check for parenthesis and parse operands inside them
+        self.expect(OperatorType::LParen)?;
+        let arg = self.parse_precedence(Precedence::Additive)?;
+        self.expect(OperatorType::RParen)?;
+
+        // Build unary expression node
+        Ok(Node::UnaryExpr {
+            op,
+            child: Box::new(arg),
+        })
+    }
+
+    fn parse_unary(&mut self, op: OperatorType) -> Result<Node, String> {
+        // Consume unary operator
+        self.advance();
+
+        // Parse child
+        let child = self.parse_primary()?;
+
+        // Build unary expression node
+        Ok(Node::UnaryExpr {
+            op,
+            child: Box::new(child),
+        })
+    }
+
+    fn parse_atom(&mut self) -> Result<Node, String> {
+        match self.peek() {
+            // Parse number
+            Some(Token::Number(value)) => {
+                let value = *value;
                 self.advance();
 
-                // Return the parsed number node
                 Ok(Node::Number(value))
             }
-            // Handle brackets
-            Some(Token::Operator(OperatorType::LBracket)) => {
-                // Consume the opening bracket
+
+            // Parse parenthesis
+            Some(Token::Operator(OperatorType::LParen)) => {
+                // Consume left opening bracket, parse operands inside and check for closing bracket
                 self.advance();
+                let expr = self.parse_precedence(Precedence::Additive)?;
+                self.expect(OperatorType::RParen)?;
 
-                // Parse the expression inside the brackets
-                let expr = self.parse_expression()?;
+                Ok(expr)
+            }
 
-                // Expect a closing bracket
-                match self.peek() {
-                    Some(Token::Operator(OperatorType::RBracket)) => {
-                        // Consume the closing bracket
-                        self.advance();
-                        Ok(expr)
-                    }
-                    _ => Err("Expected closing bracket ')'".to_string()),
-                }
-            }
-            Some(Token::Operator(_)) => {
-                Err("Unexpected operator in primary expression".to_string())
-            }
+            Some(Token::Operator(op)) => Err(format!(
+                "Unexpected operator '{}' in primary expression",
+                op
+            )),
             None => Err("Unexpected end of input".to_string()),
         }
     }
 
-    /// Returns a reference to the token at the current position without consuming it.
-    /// This allows the parser to look ahead and decide what to do next.
+    fn expect(&mut self, expected: OperatorType) -> Result<(), String> {
+        match self.peek_operator() {
+            Some(op) if op == expected => {
+                self.advance();
+
+                Ok(())
+            }
+
+            Some(op) => Err(format!("Expected '{}', found '{}'", expected, op)),
+            None => Err(format!("Expected '{}', found end of input", expected)),
+        }
+    }
+
     fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.pos)
     }
 
-    /// Peeks at the current token and extracts it as an operator.
     fn peek_operator(&self) -> Option<OperatorType> {
         self.peek().and_then(|t| t.as_operator().cloned())
     }

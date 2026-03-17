@@ -24,48 +24,55 @@ pub enum OperatorType {
     Modulo, // x % y
     Abs,    // abs(x)
     Round,  // round(x)
-    // Brackets
-    LBracket, // (
-    RBracket, // )
+    // Parenthesis
+    LParen, // (
+    RParen, // )
 
     #[default]
     Unknown,
 }
 
+/// Lower numbers = lower precedence
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Precedence {
+    Additive = 1,
+    Multiplicative = 2,
+    Exponent = 3,
+}
+
 impl OperatorType {
-    pub fn is_additive(&self) -> bool {
-        matches!(self, OperatorType::Add | OperatorType::Subtract)
+    /// Returns precedence for binary operators
+    pub fn precedence(&self) -> Option<Precedence> {
+        Some(match self {
+            Self::Add | Self::Subtract => Precedence::Additive,
+            Self::Multiply | Self::Divide | Self::Modulo | Self::Log => Precedence::Multiplicative,
+            Self::Exponent => Precedence::Exponent,
+            _ => return None,
+        })
     }
 
-    pub fn is_multiplicative(&self) -> bool {
+    pub fn is_right_associative(&self) -> bool {
+        matches!(self, Self::Exponent)
+    }
+
+    pub fn is_function(&self) -> bool {
         matches!(
             self,
-            OperatorType::Multiply
-                | OperatorType::Divide
-                | OperatorType::Log
-                | OperatorType::Modulo
+            Self::Sqrt
+                | Self::Ln
+                | Self::Cos
+                | Self::Sin
+                | Self::Tan
+                | Self::Acos
+                | Self::Asin
+                | Self::Atan
+                | Self::Abs
+                | Self::Round
         )
-    }
-
-    pub fn is_exponentiation(&self) -> bool {
-        matches!(self, OperatorType::Exponent)
     }
 
     pub fn is_unary(&self) -> bool {
-        matches!(
-            self,
-            OperatorType::Negate
-                | OperatorType::Sqrt
-                | OperatorType::Ln
-                | OperatorType::Cos
-                | OperatorType::Sin
-                | OperatorType::Tan
-                | OperatorType::Acos
-                | OperatorType::Asin
-                | OperatorType::Atan
-                | OperatorType::Abs
-                | OperatorType::Round
-        )
+        matches!(self, Self::Negate)
     }
 }
 
@@ -95,8 +102,8 @@ impl fmt::Display for OperatorType {
             OperatorType::Abs => write!(f, "abs"),
             OperatorType::Round => write!(f, "round"),
             // Brackets
-            OperatorType::LBracket => write!(f, "("),
-            OperatorType::RBracket => write!(f, ")"),
+            OperatorType::LParen => write!(f, "("),
+            OperatorType::RParen => write!(f, ")"),
 
             OperatorType::Unknown => write!(f, "?"),
         }

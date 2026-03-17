@@ -1,3 +1,5 @@
+// Copyright (c) 2026 bazelik-null
+
 #[derive(Default)]
 pub struct AppState {
     pub is_debug: bool,

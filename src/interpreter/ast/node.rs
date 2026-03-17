@@ -1,3 +1,5 @@
+// Copyright (c) 2026 bazelik-null
+
 use crate::interpreter::operators::OperatorType;
 use std::fmt;
 

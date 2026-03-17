@@ -1,3 +1,5 @@
+// Copyright (c) 2026 bazelik-null
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     Debug,

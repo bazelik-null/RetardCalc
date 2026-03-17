@@ -1,3 +1,5 @@
+// Copyright (c) 2026 bazelik-null
+
 pub mod cli;
 pub mod interpreter;
 

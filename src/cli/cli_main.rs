@@ -1,3 +1,5 @@
+// Copyright (c) 2026 bazelik-null
+
 use crate::cli::app_state::AppState;
 use crate::cli::backend::{calculate, eval_file};
 use crate::cli::calc_errors::CalcError;

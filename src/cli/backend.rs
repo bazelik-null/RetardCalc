@@ -1,3 +1,5 @@
+// Copyright (c) 2026 bazelik-null
+
 use crate::interpreter::ast::parser;
 use crate::interpreter::evaluator;
 use crate::interpreter::tokenizer::lexer;

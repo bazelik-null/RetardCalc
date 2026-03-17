@@ -1,3 +1,5 @@
+// Copyright (c) 2026 bazelik-null
+
 use crate::interpreter::ast::node::Node;
 use crate::interpreter::operators::{OperatorType, Precedence};
 use crate::interpreter::tokenizer::token::Token;

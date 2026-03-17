@@ -1,3 +1,5 @@
+// Copyright (c) 2026 bazelik-null
+
 use std::fmt;
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]

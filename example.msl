@@ -1,0 +1,37 @@
+// This is an example of Morsel program
+
+// Calculate area of the circle
+let r = 5;
+let area = pi * r^2;
+print(area);
+
+// Calculate cos and sin of the angle
+let angle = 45;
+print(cos(angle));
+print(sin(angle));
+
+// Exponentiation operations
+print(2 ^ 8);
+print(log(2, 256));
+
+// Roots
+print(cbrt(27));
+print(sqrt(16));
+print(root(4, 8));
+
+// Idk
+print(abs(-42));
+print(17 % 5);
+
+// Rounding
+let decimal = 3.7;
+print(round(decimal));
+print(floor(decimal));
+print(ceil(decimal));
+
+// Max and min values
+print(max(10, 25, 5, 30, 15));
+print(min(10, 25, 5, 30, 15));
+
+// Some complex expression
+print((10 + 3) * sin(10) - log(2, 3));

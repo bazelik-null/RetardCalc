@@ -22,8 +22,8 @@ impl Interpreter {
         }
     }
 
-    /// Execute expression and return the result
-    pub fn execute(&self, input: &str) -> Result<f64, String> {
+    /// Execute expression
+    pub fn execute(&self, input: &str) -> Result<(), String> {
         if self.debug {
             println!("[DEBUG]: Raw input: {}", input);
         }
@@ -41,13 +41,29 @@ impl Interpreter {
         }
 
         // Evaluate AST
-        let result = self.evaluate(&ast)?;
+        self.evaluate(&ast)
+    }
 
+    /// Execute expression
+    pub fn execute_with_result(&self, input: &str) -> Result<f64, String> {
         if self.debug {
-            println!("[DEBUG]: Result: {}", result);
+            println!("[DEBUG]: Raw input: {}", input);
         }
 
-        Ok(result)
+        // Tokenize
+        let tokens = self.tokenize(input)?;
+        if self.debug {
+            println!("[DEBUG]: Tokens: {:?}", tokens);
+        }
+
+        // Parse into AST
+        let ast = self.parse(tokens)?;
+        if self.debug {
+            println!("[DEBUG]: Abstract Syntax Tree:\n {}", ast);
+        }
+
+        // Evaluate AST
+        self.evaluate_with_result(&ast)
     }
 
     /// Tokenize input string into tokens
@@ -63,8 +79,15 @@ impl Interpreter {
     }
 
     /// Evaluate an AST node
-    fn evaluate(&self, ast: &Node) -> Result<f64, String> {
-        let evaluator = Evaluator::new(self.func_table.clone());
+    fn evaluate(&self, ast: &Node) -> Result<(), String> {
+        let mut evaluator = Evaluator::new(self.func_table.clone());
+        evaluator.eval(ast)?;
+        Ok(())
+    }
+
+    /// Evaluate an AST node and return result
+    fn evaluate_with_result(&self, ast: &Node) -> Result<f64, String> {
+        let mut evaluator = Evaluator::new(self.func_table.clone());
         evaluator.eval(ast)
     }
 

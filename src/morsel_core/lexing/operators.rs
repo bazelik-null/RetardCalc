@@ -33,9 +33,11 @@ pub enum OperatorType {
     Negate, // -x
     Modulo, // x % y
     // Syntax
-    LParen, // (
-    RParen, // )
-    Comma,  // ,
+    LParen,    // (
+    RParen,    // )
+    Comma,     // ,
+    Assign,    // =
+    Semicolon, // ;
 
     #[default]
     Unknown,
@@ -82,6 +84,8 @@ impl fmt::Display for OperatorType {
             OperatorType::LParen => write!(f, "("),
             OperatorType::RParen => write!(f, ")"),
             OperatorType::Comma => write!(f, ","),
+            OperatorType::Assign => write!(f, "="),
+            OperatorType::Semicolon => write!(f, ";"),
 
             OperatorType::Unknown => write!(f, "?"),
         }

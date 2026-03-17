@@ -1,24 +1,27 @@
 // Copyright (c) 2026 bazelik-null
 
-use crate::morsel_core::lexing::operators::OperatorType;
 use std::fmt;
 
 #[derive(Debug, Clone)]
 pub enum Node {
-    Number(f64),
-    UnaryExpr {
-        op: OperatorType,
-        child: Box<Node>,
+    // Literals and references
+    Literal(f64),
+    Variable(String),
+
+    // Operations (unary, binary, functions)
+    Call {
+        name: String,
+        args: Vec<Node>, // [left, right] for binary, [child] for unary
     },
-    FunctionCall {
-        func: String,
-        args: Vec<Node>,
+
+    // Statements
+    Let {
+        name: String,
+        value: Box<Node>,
     },
-    BinaryExpr {
-        op: OperatorType,
-        lvalue: Box<Node>,
-        rvalue: Box<Node>,
-    },
+
+    // Blocks
+    Block(Vec<Node>),
 }
 
 impl fmt::Display for Node {
@@ -38,21 +41,38 @@ impl Node {
         result.push_str(connector);
 
         match self {
-            Node::Number(n) => {
-                result.push_str(&format!("Number({})\n", n));
-            }
-
-            Node::UnaryExpr { op, child } => {
-                result.push_str(&format!("UnaryExpr({})\n", op));
+            Node::Block(statements) => {
+                result.push_str("Block\n");
 
                 let extension = if is_last { "    " } else { "│   " };
                 let child_prefix = format!("{}{}", prefix, extension);
 
-                result.push_str(&child.tree_string_internal(&child_prefix, true));
+                // Display all statements
+                for (i, stmt) in statements.iter().enumerate() {
+                    let is_last_stmt = i == statements.len() - 1;
+                    result.push_str(&stmt.tree_string_internal(&child_prefix, is_last_stmt));
+                }
             }
 
-            Node::FunctionCall { func, args } => {
-                result.push_str(&format!("FunctionCall({})\n", func));
+            Node::Literal(n) => {
+                result.push_str(&format!("Literal({})\n", n));
+            }
+
+            Node::Variable(name) => {
+                result.push_str(&format!("Variable(\"{}\")\n", name));
+            }
+
+            Node::Let { name, value } => {
+                result.push_str(&format!("Let(\"{}\")\n", name));
+
+                let extension = if is_last { "    " } else { "│   " };
+                let child_prefix = format!("{}{}", prefix, extension);
+
+                result.push_str(&value.tree_string_internal(&child_prefix, true));
+            }
+
+            Node::Call { name, args } => {
+                result.push_str(&format!("Call(\"{}\")\n", name));
 
                 let extension = if is_last { "    " } else { "│   " };
                 let child_prefix = format!("{}{}", prefix, extension);
@@ -63,19 +83,6 @@ impl Node {
                     result.push_str(&arg.tree_string_internal(&child_prefix, is_last_arg));
                 }
             }
-
-            Node::BinaryExpr { op, lvalue, rvalue } => {
-                result.push_str(&format!("BinaryExpr({})\n", op));
-
-                let extension = if is_last { "    " } else { "│   " };
-                let child_prefix = format!("{}{}", prefix, extension);
-
-                // Add left value
-                result.push_str(&lvalue.tree_string_internal(&child_prefix, false));
-
-                // Add right value
-                result.push_str(&rvalue.tree_string_internal(&child_prefix, true));
-            }
         }
 
         result
@@ -84,49 +91,52 @@ impl Node {
     /// Get the string representation of a node type for debugging
     pub fn node_type(&self) -> &'static str {
         match self {
-            Node::Number(_) => "Number",
-            Node::UnaryExpr { .. } => "UnaryExpr",
-            Node::FunctionCall { .. } => "FunctionCall",
-            Node::BinaryExpr { .. } => "BinaryExpr",
+            Node::Block(_) => "Block",
+            Node::Literal(_) => "Literal",
+            Node::Variable(_) => "Variable",
+            Node::Let { .. } => "Let",
+            Node::Call { .. } => "Call",
         }
     }
 
-    /// Check if this node is a atom node (no children)
+    /// Check if this node is an atom node (no children)
     pub fn is_atom(&self) -> bool {
-        matches!(self, Node::Number(_))
+        matches!(self, Node::Literal(_) | Node::Variable(_))
     }
 
     /// Get all child nodes
     pub fn children(&self) -> Vec<&Node> {
         match self {
-            Node::Number(_) => vec![],
-            Node::UnaryExpr { child, .. } => vec![child.as_ref()],
-            Node::FunctionCall { args, .. } => args.iter().collect(),
-            Node::BinaryExpr { lvalue, rvalue, .. } => vec![lvalue.as_ref(), rvalue.as_ref()],
+            Node::Block(statements) => statements.iter().collect(),
+            Node::Literal(_) | Node::Variable(_) => vec![],
+            Node::Let { value, .. } => vec![value.as_ref()],
+            Node::Call { args, .. } => args.iter().collect(),
         }
     }
 
     /// Get mutable references to all child nodes
     pub fn children_mut(&mut self) -> Vec<&mut Node> {
         match self {
-            Node::Number(_) => vec![],
-            Node::UnaryExpr { child, .. } => vec![child.as_mut()],
-            Node::FunctionCall { args, .. } => args.iter_mut().collect(),
-            Node::BinaryExpr { lvalue, rvalue, .. } => {
-                vec![lvalue.as_mut(), rvalue.as_mut()]
-            }
+            Node::Block(statements) => statements.iter_mut().collect(),
+            Node::Literal(_) | Node::Variable(_) => vec![],
+            Node::Let { value, .. } => vec![value.as_mut()],
+            Node::Call { args, .. } => args.iter_mut().collect(),
         }
     }
 
     /// Calculate the depth of the tree
     pub fn depth(&self) -> usize {
         match self {
-            Node::Number(_) => 0,
-            Node::UnaryExpr { child, .. } => 1 + child.depth(),
-            Node::FunctionCall { args, .. } => {
-                1 + args.iter().map(|arg| arg.depth()).max().unwrap_or(0)
+            Node::Block(statements) => {
+                1 + statements
+                    .iter()
+                    .map(|stmt| stmt.depth())
+                    .max()
+                    .unwrap_or(0)
             }
-            Node::BinaryExpr { lvalue, rvalue, .. } => 1 + lvalue.depth().max(rvalue.depth()),
+            Node::Literal(_) | Node::Variable(_) => 0,
+            Node::Let { value, .. } => 1 + value.depth(),
+            Node::Call { args, .. } => 1 + args.iter().map(|arg| arg.depth()).max().unwrap_or(0),
         }
     }
 
@@ -137,5 +147,10 @@ impl Node {
             .iter()
             .map(|child| child.node_count())
             .sum::<usize>()
+    }
+
+    /// Get a human-readable tree representation
+    pub fn tree_string(&self) -> String {
+        self.tree_string_internal("", true)
     }
 }

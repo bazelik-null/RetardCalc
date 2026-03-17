@@ -29,6 +29,8 @@
 
 - **Exponentiation:** `x ^ y`
 - **Square root:** `sqrt(x)`
+- **Cubic root:** `cbrt(x)`
+- **Root:** `root(x, y)` (where x is radicant, y is degree)
 - **Logarithm:** `log(x, y)` (where x is base, y is argument)
 - **Natural logarithm:** `ln(x)`
 
@@ -49,6 +51,21 @@
 - **Rounding:** `round(x)`
 - **Max value:** `max(x, ...)`
 - **Min value:** `min(x, ...)`
+- **Floor:** `floor(x)`
+- **Ceil:** `ceil(x)`
+
+### Tools
+
+- **Printing:** `print(x)`
+
+# Available keywords
+
+- **Define a variable:** `let x = y;` (definition requires initialization)
+
+# Available features
+
+- **Assign a variable:** `x = y;`
+- **Comments:** `// Comment`
 
 # Project Structure
 

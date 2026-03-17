@@ -1,7 +1,7 @@
 // Copyright (c) 2026 bazelik-null
 
 use crate::cli::app_state::AppState;
-use crate::cli::backend::{calculate, eval_file};
+use crate::cli::backend::{calculate_with_result, eval_file};
 use crate::cli::cmd::Command;
 
 use std::io::{self, Write};
@@ -64,7 +64,7 @@ fn handle_input_cycle(state: &mut AppState, input_buffer: &mut String) -> bool {
     }
 
     // Calculate and display result
-    match calculate(trimmed, state.is_debug) {
+    match calculate_with_result(trimmed, state.is_debug) {
         Ok(result) => println!("{}", result),
         Err(err) => eprintln!("[ERROR]: {}", err),
     }

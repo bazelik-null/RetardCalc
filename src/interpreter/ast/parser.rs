@@ -54,7 +54,7 @@ impl Parser {
             let next_min = if op.is_right_associative() {
                 precedence
             } else {
-                Precedence::Exponent
+                precedence.next_higher()
             };
 
             // Parse right operands with calculated minimum precedence

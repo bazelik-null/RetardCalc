@@ -2,6 +2,24 @@
 
 use std::fmt;
 
+/// Lower numbers = lower precedence
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Precedence {
+    Additive = 1,
+    Multiplicative = 2,
+    Exponent = 3,
+}
+
+impl Precedence {
+    pub fn next_higher(self) -> Self {
+        match self {
+            Precedence::Additive => Precedence::Multiplicative,
+            Precedence::Multiplicative => Precedence::Exponent,
+            Precedence::Exponent => Precedence::Exponent,
+        }
+    }
+}
+
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub enum OperatorType {
     // Arithmetic
@@ -32,14 +50,6 @@ pub enum OperatorType {
 
     #[default]
     Unknown,
-}
-
-/// Lower numbers = lower precedence
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Precedence {
-    Additive = 1,
-    Multiplicative = 2,
-    Exponent = 3,
 }
 
 impl OperatorType {

@@ -3,10 +3,13 @@ use std::str::FromStr;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
+    // Real types
     Integer,
     Float,
     String,
     Boolean,
+    // Utility types
+    Any,  // Unsafe
     Null, // The null literal value (nullable type)
     Unit, // Statements, assignments, functions with no return
 }
@@ -26,9 +29,12 @@ impl Type {
     pub fn is_compatible_with(&self, other: &Type) -> bool {
         match (self, other) {
             (a, b) if a == b => true,
+            // Type::Any accepts anything
+            (_, Type::Any) => true,
+            (Type::Any, _) => true,
+
             (Type::Integer, Type::Float) => true,
             (Type::Float, Type::Integer) => true,
-            // Remove implicit conversions — require explicit casts
             _ => false,
         }
     }
@@ -37,6 +43,9 @@ impl Type {
     pub fn can_convert_to(&self, target: &Type) -> bool {
         match (self, target) {
             (a, b) if a == b => true,
+            // Type::Any accepts anything
+            (_, Type::Any) => true,
+            (Type::Any, _) => true,
             // Only allow numeric conversions (explicit casts)
             (Type::Integer, Type::Float) | (Type::Float, Type::Integer) => true,
             // Only allow conversion TO string (from any type)
@@ -58,6 +67,7 @@ impl FromStr for Type {
             "bool" => Ok(Type::Boolean),
             "null" => Ok(Type::Null),
             "unit" => Ok(Type::Unit),
+            "any" => Ok(Type::Any),
             _ => Err(format!("Unknown type: {}", s)),
         }
     }
@@ -72,6 +82,7 @@ impl std::fmt::Display for Type {
             Type::Boolean => write!(f, "bool"),
             Type::Null => write!(f, "null"),
             Type::Unit => write!(f, "unit"),
+            Type::Any => write!(f, "any"),
         }
     }
 }

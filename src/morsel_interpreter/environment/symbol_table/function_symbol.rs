@@ -1,8 +1,11 @@
 // Copyright (c) 2026 bazelik-null
 
+use crate::morsel_interpreter::environment::morsel_std::BuiltinFunctionDispatcher;
 use crate::morsel_interpreter::environment::types::Type;
 use crate::morsel_interpreter::parser::ast_node::Node;
 use std::collections::HashMap;
+
+const BUILTIN_NAMESPACES: &[&str] = &["std", "std::math", "std::io"];
 
 /// Represents a function parameter with RTTI
 #[derive(Clone, Debug)]
@@ -24,17 +27,18 @@ impl FunctionParamSymbol {
 #[derive(Clone, Debug)]
 pub struct FunctionSymbol {
     pub name: String,
+    pub namespace: String,
     pub parameters: Vec<FunctionParamSymbol>,
     pub return_type: Type,
     pub scope_depth: usize,
     pub implementation: Option<Box<Node>>, // None for builtins
-    pub is_builtin: bool,
-    pub is_variadic: bool, // True if function accepts infinite parameters
+    pub is_variadic: bool,                 // True if function accepts infinite parameters
 }
 
 impl FunctionSymbol {
     pub fn new(
         name: String,
+        namespace: String,
         parameters: Vec<FunctionParamSymbol>,
         return_type: Type,
         scope_depth: usize,
@@ -42,41 +46,63 @@ impl FunctionSymbol {
     ) -> Self {
         FunctionSymbol {
             name,
+            namespace,
             parameters,
             return_type,
             scope_depth,
             implementation,
-            is_builtin: false,
             is_variadic: false,
         }
     }
 
-    pub fn builtin(name: String, parameters: Vec<FunctionParamSymbol>, return_type: Type) -> Self {
+    pub fn builtin(
+        name: String,
+        namespace: String,
+        parameters: Vec<FunctionParamSymbol>,
+        return_type: Type,
+    ) -> Self {
         FunctionSymbol {
             name,
+            namespace,
             parameters,
             return_type,
             scope_depth: 0,
             implementation: None,
-            is_builtin: true,
             is_variadic: false,
         }
     }
 
     pub fn builtin_variadic(
         name: String,
+        namespace: String,
         parameters: Vec<FunctionParamSymbol>,
         return_type: Type,
     ) -> Self {
         FunctionSymbol {
             name,
+            namespace,
             parameters,
             return_type,
             scope_depth: 0,
             implementation: None,
-            is_builtin: true,
             is_variadic: true,
         }
+    }
+
+    /// Get the fully qualified name (namespace::name)
+    pub fn fully_qualified_name(&self) -> String {
+        if self.namespace.is_empty() {
+            self.name.clone()
+        } else {
+            format!("{}::{}", self.namespace, self.name)
+        }
+    }
+
+    /// Check if this function is a builtin (based on namespace)
+    pub fn is_builtin(&self) -> bool {
+        BUILTIN_NAMESPACES
+            .iter()
+            .any(|&ns| self.namespace == ns || self.namespace.starts_with(&format!("{}::", ns)))
     }
 
     /// Get the number of parameters
@@ -98,43 +124,12 @@ impl FunctionSymbol {
     }
 }
 
-/// Global symbol table for functions
+/// Global symbol table for functions with namespace support
 #[derive(Clone)]
 pub struct FunctionSymbolTable {
+    // Key: fully qualified name (namespace::name)
     functions: HashMap<String, FunctionSymbol>,
 }
-
-const BUILTIN_FUNCTIONS: &[(&str, usize, Type, bool)] = &[
-    ("sin", 1, Type::Float, false),
-    ("cos", 1, Type::Float, false),
-    ("tan", 1, Type::Float, false),
-    ("asin", 1, Type::Float, false),
-    ("acos", 1, Type::Float, false),
-    ("atan", 1, Type::Float, false),
-    // Roots
-    ("sqrt", 1, Type::Float, false),
-    ("cbrt", 1, Type::Float, false),
-    ("ln", 1, Type::Float, false),
-    // Rounding
-    ("round", 1, Type::Float, false),
-    ("floor", 1, Type::Float, false),
-    ("ceil", 1, Type::Float, false),
-    // Misc
-    ("abs", 1, Type::Float, false),
-    // Multi-arg
-    ("root", 2, Type::Float, false),
-    ("log", 2, Type::Float, false),
-    ("max", 1, Type::Float, true), // Min 1 arg
-    ("min", 1, Type::Float, true), // Min 1 arg
-    // I/O
-    ("println", 0, Type::Null, true), // 0+ args
-    ("print", 0, Type::Null, true),   // 0+ args
-    // Explicit conversion
-    ("to_int", 1, Type::Integer, false),
-    ("to_float", 1, Type::Float, false),
-    ("to_bool", 1, Type::Boolean, false),
-    ("to_string", 1, Type::String, false),
-];
 
 impl FunctionSymbolTable {
     pub fn new() -> Self {
@@ -142,47 +137,70 @@ impl FunctionSymbolTable {
             functions: HashMap::new(),
         };
 
-        table.register_builtins();
+        BuiltinFunctionDispatcher::register_builtins(&mut table);
 
         table
     }
 
-    /// Define a function
+    /// Define a function with namespace support
     pub fn define(&mut self, symbol: FunctionSymbol) -> Result<(), String> {
-        if self.functions.contains_key(&symbol.name) {
-            let existing = &self.functions[&symbol.name];
-            if existing.is_builtin {
-                return Err(format!(
-                    "Cannot override builtin function '{}'",
-                    symbol.name
-                ));
+        let fq_name = symbol.fully_qualified_name();
+
+        if let Some(existing) = self.functions.get(&fq_name) {
+            if existing.is_builtin() {
+                return Err(format!("Cannot override builtin function '{}'", fq_name));
             }
             return Err(format!(
                 "Function '{}' is already defined at scope depth {}",
-                symbol.name, existing.scope_depth
+                fq_name, existing.scope_depth
             ));
         }
 
-        self.functions.insert(symbol.name.clone(), symbol);
+        self.functions.insert(fq_name, symbol);
         Ok(())
     }
 
-    /// Lookup a function
-    pub fn lookup(&self, name: &str) -> Option<&FunctionSymbol> {
-        self.functions.get(name)
+    /// Lookup a function by fully qualified name
+    pub fn lookup(&self, fully_qualified_name: &str) -> Option<&FunctionSymbol> {
+        self.functions.get(fully_qualified_name)
+    }
+
+    /// Lookup a function by name with optional namespace prefix
+    pub fn lookup_with_namespace(
+        &self,
+        name: &str,
+        namespace: Option<&str>,
+    ) -> Option<&FunctionSymbol> {
+        if let Some(ns) = namespace {
+            let fq_name = format!("{}::{}", ns, name);
+            self.functions.get(&fq_name)
+        } else {
+            // Try exact match first
+            if let Some(func) = self.functions.get(name) {
+                return Some(func);
+            }
+            // Try to find in builtin namespaces
+            for &builtin_ns in BUILTIN_NAMESPACES {
+                let fq_name = format!("{}::{}", builtin_ns, name);
+                if let Some(func) = self.functions.get(&fq_name) {
+                    return Some(func);
+                }
+            }
+            None
+        }
     }
 
     /// Lookup mutable reference
-    pub fn lookup_mut(&mut self, name: &str) -> Option<&mut FunctionSymbol> {
-        self.functions.get_mut(name)
+    pub fn lookup_mut(&mut self, fully_qualified_name: &str) -> Option<&mut FunctionSymbol> {
+        self.functions.get_mut(fully_qualified_name)
     }
 
     /// Check if function exists
-    pub fn exists(&self, name: &str) -> bool {
-        self.functions.contains_key(name)
+    pub fn exists(&self, fully_qualified_name: &str) -> bool {
+        self.functions.contains_key(fully_qualified_name)
     }
 
-    /// Get all function names
+    /// Get all function names (fully qualified)
     pub fn function_names(&self) -> Vec<String> {
         self.functions.keys().cloned().collect()
     }
@@ -192,31 +210,45 @@ impl FunctionSymbolTable {
         self.functions.values().collect()
     }
 
+    /// Get functions in a specific namespace
+    pub fn functions_in_namespace(&self, namespace: &str) -> Vec<&FunctionSymbol> {
+        self.functions
+            .values()
+            .filter(|func| func.namespace == namespace)
+            .collect()
+    }
+
     /// Remove a function
-    pub fn remove(&mut self, name: &str) -> Option<FunctionSymbol> {
-        self.functions.remove(name)
+    pub fn remove(&mut self, fully_qualified_name: &str) -> Option<FunctionSymbol> {
+        self.functions.remove(fully_qualified_name)
     }
 
     /// Clear all user-defined functions (keeps builtins)
     pub fn clear_user_functions(&mut self) {
-        self.functions.retain(|_, func| func.is_builtin);
+        self.functions.retain(|_, func| func.is_builtin());
     }
 
     /// Get function parameter count
-    pub fn get_param_count(&self, name: &str) -> Option<usize> {
-        self.functions.get(name).map(|f| f.param_count())
+    pub fn get_param_count(&self, fully_qualified_name: &str) -> Option<usize> {
+        self.functions
+            .get(fully_qualified_name)
+            .map(|f| f.param_count())
     }
 
     /// Validate function arguments count
-    pub fn validate_arg_count(&self, name: &str, arg_count: usize) -> Result<(), String> {
-        match self.lookup(name) {
+    pub fn validate_arg_count(
+        &self,
+        fully_qualified_name: &str,
+        arg_count: usize,
+    ) -> Result<(), String> {
+        match self.lookup(fully_qualified_name) {
             Some(func) => {
                 if func.is_variadic {
                     // For variadic functions, check minimum required args
                     if arg_count < func.param_count() {
                         return Err(format!(
                             "Function '{}' expects at least {} argument(s), got {}",
-                            name,
+                            fully_qualified_name,
                             func.param_count(),
                             arg_count
                         ));
@@ -227,7 +259,7 @@ impl FunctionSymbolTable {
                     if arg_count != func.param_count() {
                         Err(format!(
                             "Function '{}' expects {} argument(s), got {}",
-                            name,
+                            fully_qualified_name,
                             func.param_count(),
                             arg_count
                         ))
@@ -236,20 +268,24 @@ impl FunctionSymbolTable {
                     }
                 }
             }
-            None => Err(format!("Function '{}' not found", name)),
+            None => Err(format!("Function '{}' not found", fully_qualified_name)),
         }
     }
 
     /// Validate parameter types
-    pub fn validate_param_types(&self, name: &str, arg_types: &[Type]) -> Result<(), String> {
-        match self.lookup(name) {
+    pub fn validate_param_types(
+        &self,
+        fully_qualified_name: &str,
+        arg_types: &[Type],
+    ) -> Result<(), String> {
+        match self.lookup(fully_qualified_name) {
             Some(func) => {
                 if func.is_variadic {
                     // For variadic functions, check minimum required args
                     if arg_types.len() < func.param_count() {
                         return Err(format!(
                             "Function '{}' expects at least {} argument(s), got {}",
-                            name,
+                            fully_qualified_name,
                             func.param_count(),
                             arg_types.len()
                         ));
@@ -261,7 +297,7 @@ impl FunctionSymbolTable {
                             if !arg_type.is_compatible_with(&first_param_type) {
                                 return Err(format!(
                                     "Function '{}' argument {} expects type {}, got {}",
-                                    name, i, first_param_type, arg_type
+                                    fully_qualified_name, i, first_param_type, arg_type
                                 ));
                             }
                         }
@@ -272,7 +308,7 @@ impl FunctionSymbolTable {
                     if arg_types.len() != func.param_count() {
                         return Err(format!(
                             "Function '{}' expects {} argument(s), got {}",
-                            name,
+                            fully_qualified_name,
                             func.param_count(),
                             arg_types.len()
                         ));
@@ -284,42 +320,22 @@ impl FunctionSymbolTable {
                         {
                             return Err(format!(
                                 "Function '{}' parameter {} expects type {}, got {}",
-                                name, i, param_type, arg_type
+                                fully_qualified_name, i, param_type, arg_type
                             ));
                         }
                     }
                     Ok(())
                 }
             }
-            None => Err(format!("Function '{}' not found", name)),
+            None => Err(format!("Function '{}' not found", fully_qualified_name)),
         }
-    }
-
-    /// Check if function is builtin
-    pub fn is_builtin(&self, name: &str) -> bool {
-        self.lookup(name)
-            .map(|func| func.is_builtin)
-            .unwrap_or(false)
     }
 
     /// Check if function is variadic
-    pub fn is_variadic(&self, name: &str) -> bool {
-        self.lookup(name)
+    pub fn is_variadic(&self, fully_qualified_name: &str) -> bool {
+        self.lookup(fully_qualified_name)
             .map(|func| func.is_variadic)
             .unwrap_or(false)
-    }
-
-    fn register_builtins(&mut self) {
-        for &(name, param_count, return_type, is_variadic) in BUILTIN_FUNCTIONS {
-            let params = (0..param_count)
-                .map(|i| FunctionParamSymbol::new(format!("arg{}", i), Type::Float))
-                .collect();
-
-            let mut func = FunctionSymbol::builtin(name.to_string(), params, return_type);
-            func.is_variadic = is_variadic;
-
-            let _ = self.define(func);
-        }
     }
 }
 

@@ -3,20 +3,20 @@
 // Or ./Morsel and "file examples/variables.msl"
 
 fn main() {
-    println("\n== What is a Variable? ==")
-    println("A variable is a named storage location that holds a value or data.\n")
+    std::io::println("\n== What is a Variable? ==")
+    std::io::println("A variable is a named storage location that holds a value or data.\n")
 
     // Creating a variable with an explicit type
     let message: string = "Hello, Morsel!";
-    println(message);
+    std::io::println(message);
 
     // Creating a variable with an explicit type (number)
     let age: int = 100;
-    println("My age is:", age);
+    std::io::println("My age is:", age);
 
 
-    println("\n== Automatic Type Detection ==")
-    println("You don't always need to write the type. Morsel figures it out!\n")
+    std::io::println("\n== Automatic Type Detection ==")
+    std::io::println("You don't always need to write the type. Morsel figures it out!\n")
 
     // Morsel automatically detects the type from the value
     let count = 10 + 11;      // This is an int
@@ -24,53 +24,53 @@ fn main() {
     let nickname = "Bazelik"; // This is a string
     let isRaining = false;    // This is a bool
 
-    println("count:", count);
-    println("temperature:", temperature);
-    println("nickname:", nickname);
-    println("isRaining:", isRaining);
+    std::io::println("count:", count);
+    std::io::println("temperature:", temperature);
+    std::io::println("nickname:", nickname);
+    std::io::println("isRaining:", isRaining);
 
 
-    println("\n== Changing Variables ==")
-    println("By default, variables cannot change. Use 'mut' to allow changes.\n")
+    std::io::println("\n== Changing Variables ==")
+    std::io::println("By default, variables cannot change. Use 'mut' to allow changes.\n")
 
     // This variable cannot be changed
     let favorite_color = "blue";
-    println("Favorite color:", favorite_color);
+    std::io::println("Favorite color:", favorite_color);
     // favorite_color = "red"; // [ERROR]: Cannot reassign immutable variable: 'x'
 
     // This variable CAN be changed because of 'mut'
     let mut score = 0;
-    println("Starting score:", score);
+    std::io::println("Starting score:", score);
 
     score = 10;
-    println("Updated score:", score);
+    std::io::println("Updated score:", score);
 
     score = 25;
-    println("Updated score:", score);
+    std::io::println("Updated score:", score);
 
 
-    println("\n== Simple Math with Variables ==")
-    println("You can do calculations with variables.\n")
+    std::io::println("\n== Simple Math with Variables ==")
+    std::io::println("You can do calculations with variables.\n")
 
     let apples = 5;
     let oranges = 3;
     let total_fruit = apples + oranges;
 
-    println("Apples:", apples);
-    println("Oranges:", oranges);
-    println("Total fruit:", total_fruit);
+    std::io::println("Apples:", apples);
+    std::io::println("Oranges:", oranges);
+    std::io::println("Total fruit:", total_fruit);
 
     let radius = 4;
     let mut area: float = pi * radius^2; // 'pi' is a builtin constant like. There is also 'e'
 
-    println("Radius:", radius);
-    println("Area:", area);
+    std::io::println("Radius:", radius);
+    std::io::println("Area:", area);
 
-    println("\nBut i need it as int!");
-    area = round(area); // Rounding functions can return any numeric type
+    std::io::println("\nBut i need it as int!");
+    area = std::math::round(area); // Rounding functions can return any numeric type
 
     // We can use 'to_type' to cast variables to another type.
-    let area_int: int = to_int(area);
+    let area_int: int = std::to_int(area);
 
-    println("Area int:", area_int);
+    std::io::println("Area int:", area_int);
 }

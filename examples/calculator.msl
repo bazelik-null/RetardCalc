@@ -1,0 +1,14 @@
+fn prompt(text: string): int {
+    std::io::println(text);
+    let input = std::io::input("> ");
+    std::to_int(input)
+}
+
+fn main() {
+    let x = prompt("Enter first number");
+    let y = prompt("Enter second number");
+
+    let result = x + y;
+
+    std::io::println("Result:", result);
+}

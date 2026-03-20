@@ -1,6 +1,8 @@
 // Copyright (c) 2026 bazelik-null
 
+use crate::morsel_interpreter::environment::morsel_std::BuiltinFunctionDispatcher;
 use crate::morsel_interpreter::environment::symbol_table::SymbolTable;
+use crate::morsel_interpreter::environment::symbol_table::function_symbol::FunctionSymbol;
 use crate::morsel_interpreter::environment::symbol_table::variable_symbol::VariableSymbol;
 use crate::morsel_interpreter::environment::types::Type;
 use crate::morsel_interpreter::environment::value::Value;
@@ -20,13 +22,16 @@ impl Executor {
 
     /// Main entry point. Executes the program by calling main()
     pub fn execute(&mut self) -> Result<(), String> {
-        // Check if main exists
-        if !self.symbol_table.functions.exists("main") {
-            return Err("No main function defined".to_string());
-        }
+        // Look for main function in symbol table
+        let function = self
+            .symbol_table
+            .functions
+            .lookup("main")
+            .ok_or_else(|| format!("Function '{}' not found", "main"))?
+            .clone();
 
         // Call main()
-        self.evaluate_function("main", &[])?;
+        self.evaluate_function("main", &function, &[])?;
 
         Ok(())
     }
@@ -194,11 +199,29 @@ impl Executor {
         args: &[Value],
         target_type: Option<Type>,
     ) -> Result<Value, String> {
-        if self.symbol_table.functions.is_builtin(name) {
-            return self.evaluate_builtin_function(name, args, target_type);
+        // Look for function in symbol table
+        let function = self
+            .symbol_table
+            .functions
+            .lookup(name)
+            .ok_or_else(|| format!("Function '{}' not found", name))?
+            .clone();
+
+        // Validate arguments using the function table
+        self.symbol_table
+            .functions
+            .validate_arg_count(name, args.len())?;
+
+        if function.is_builtin() {
+            return self.evaluate_builtin_function(
+                function.name.as_str(),
+                function.namespace.as_str(),
+                args,
+                target_type,
+            );
         }
 
-        self.evaluate_function(name, args)
+        self.evaluate_function(name, &function, args)
     }
 
     /// Check if two types are compatible
@@ -355,91 +378,33 @@ impl Executor {
     /// Evaluates a builtin function with target type context
     fn evaluate_builtin_function(
         &self,
-        func: &str,
+        name: &str,
+        namespace: &str,
         args: &[Value],
         target_type: Option<Type>,
     ) -> Result<Value, String> {
-        let result = match func {
-            "sin" => args[0].to_float()?.sin(),
-            "cos" => args[0].to_float()?.cos(),
-            "tan" => args[0].to_float()?.tan(),
-            "asin" => args[0].to_float()?.asin(),
-            "acos" => args[0].to_float()?.acos(),
-            "atan" => args[0].to_float()?.atan(),
+        // Call the builtin implementation
+        let result = BuiltinFunctionDispatcher::call(name, namespace, args)?;
 
-            "sqrt" => args[0].to_float()?.sqrt(),
-            "cbrt" => args[0].to_float()?.cbrt(),
-            "ln" => args[0].to_float()?.ln(),
-
-            "round" => args[0].to_float()?.round(),
-            "floor" => args[0].to_float()?.floor(),
-            "ceil" => args[0].to_float()?.ceil(),
-
-            "abs" => args[0].to_float()?.abs(),
-
-            "root" => args[0].to_float()?.powf(1.0 / args[1].to_float()?),
-            "log" => args[1].to_float()?.log(args[0].to_float()?),
-
-            "max" => args
-                .iter()
-                .try_fold(f64::NEG_INFINITY, |acc, v| v.to_float().map(|f| acc.max(f)))?,
-            "min" => args
-                .iter()
-                .try_fold(f64::INFINITY, |acc, v| v.to_float().map(|f| acc.min(f)))?,
-
-            // I/O
-            "println" | "print" => {
-                let output = args
-                    .iter()
-                    .map(|v| v.display())
-                    .collect::<Vec<_>>()
-                    .join(" ");
-
-                if func == "println" {
-                    println!("{}", output);
-                } else {
-                    print!("{}", output);
-                }
-
-                return Ok(Value::Null);
-            }
-
-            // Explicit conversion
-            "to_int" => return Ok(Value::Integer(args[0].to_integer()?)),
-            "to_float" => return Ok(Value::Float(args[0].to_float()?)),
-            "to_bool" => return Ok(Value::Boolean(args[0].to_bool()?)),
-            "to_string" => return Ok(Value::String(args[0].display())),
-
-            _ => return Err(format!("Unknown function: '{}'", func)),
-        };
-
-        // Return based on target type or default to Float
-        match target_type {
-            Some(Type::Integer) => Ok(Value::Integer(result as i64)),
-            _ => Ok(Value::Float(result)),
+        // Handle target type conversion for math functions
+        match (&result, target_type) {
+            (Value::Float(f), Some(Type::Integer)) => Ok(Value::Integer(*f as i64)),
+            _ => Ok(result),
         }
     }
 
     /// Evaluate a user-defined function with explicit type checking
-    fn evaluate_function(&mut self, func: &str, args: &[Value]) -> Result<Value, String> {
-        // Look for function in symbol table
-        let function = self
-            .symbol_table
-            .functions
-            .lookup(func)
-            .ok_or_else(|| format!("Function '{}' not found", func))?
-            .clone();
-
-        // Check args count
-        self.symbol_table
-            .functions
-            .validate_arg_count(func, args.len())?;
-
+    fn evaluate_function(
+        &mut self,
+        name: &str,
+        function: &FunctionSymbol,
+        args: &[Value],
+    ) -> Result<Value, String> {
         // Get function implementation
         let impl_node = function
             .implementation
             .as_ref()
-            .ok_or_else(|| format!("Undefined implementation for function: {}", func))?
+            .ok_or_else(|| format!("Undefined implementation for function: {}", name))?
             .clone();
 
         // Push function scope
@@ -454,7 +419,7 @@ impl Executor {
                 self.symbol_table.pop_scope();
                 return Err(format!(
                     "Function '{}' parameter '{}' type mismatch: expected {}, got {}",
-                    func, param.name, param.type_annotation, arg_type
+                    name, param.name, param.type_annotation, arg_type
                 ));
             }
 

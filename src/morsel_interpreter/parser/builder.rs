@@ -1,10 +1,10 @@
 // Copyright (c) 2026 bazelik-null
 
+use crate::morsel_interpreter::environment::symbol_table::SymbolTable;
 use crate::morsel_interpreter::environment::symbol_table::function_symbol::{
     FunctionParamSymbol, FunctionSymbol,
 };
 use crate::morsel_interpreter::environment::symbol_table::variable_symbol::VariableSymbol;
-use crate::morsel_interpreter::environment::symbol_table::SymbolTable;
 use crate::morsel_interpreter::environment::types::Type;
 use crate::morsel_interpreter::environment::value::Value;
 use crate::morsel_interpreter::lexer::syntax_operator::{Precedence, SyntaxOperator};
@@ -102,7 +102,10 @@ impl AstBuilder {
     fn parse_func_binding(&mut self) -> Result<Node, String> {
         self.advance(); // consume 'fn'
 
-        let name = self.parse_identifier("fn")?;
+        let full_name = self.parse_identifier("fn")?;
+
+        // Extract namespace and function name from identifier
+        let (namespace, name) = self.extract_namespace_and_name(&full_name)?;
 
         // Parse arguments
         self.expect_operator(SyntaxOperator::LParen)?;
@@ -132,9 +135,10 @@ impl AstBuilder {
 
         self.symbol_table.pop_scope();
 
-        // Register function
+        // Register function with namespace
         let func_symbol = FunctionSymbol::new(
             name.clone(),
+            namespace.clone(),
             param_symbols,
             return_type,
             definition_depth,
@@ -481,6 +485,49 @@ impl AstBuilder {
         } else {
             Ok(None)
         }
+    }
+
+    /// Extract namespace and function name from a fully qualified identifier.
+    /// Examples:
+    /// - "add" -> ("", "add")
+    /// - "helpers::add" -> ("helpers", "add")
+    /// - "helpers::tools::add" -> ("helpers::tools", "add")
+    fn extract_namespace_and_name(&self, full_name: &str) -> Result<(String, String), String> {
+        if let Some(last_colon_pos) = full_name.rfind("::") {
+            let namespace = full_name[..last_colon_pos].to_string();
+            let name = full_name[last_colon_pos + 2..].to_string();
+
+            // Validate namespace format
+            if namespace.is_empty() {
+                return Err("Namespace cannot be empty before '::'".to_string());
+            }
+            if name.is_empty() {
+                return Err("Function name cannot be empty after '::'".to_string());
+            }
+
+            // Validate that namespace and name are valid identifiers
+            if !self.is_valid_identifier(&namespace) {
+                return Err(format!("Invalid namespace format: '{}'", namespace));
+            }
+            if !self.is_valid_identifier(&name) {
+                return Err(format!("Invalid function name: '{}'", name));
+            }
+
+            Ok((namespace, name))
+        } else {
+            // No namespace, just a function name
+            if !self.is_valid_identifier(full_name) {
+                return Err(format!("Invalid function name: '{}'", full_name));
+            }
+            Ok((String::new(), full_name.to_string()))
+        }
+    }
+
+    /// Check if a string is a valid identifier (can contain letters, digits, underscores).
+    fn is_valid_identifier(&self, s: &str) -> bool {
+        !s.is_empty()
+            && s.chars().all(|c| c.is_alphanumeric() || c == '_')
+            && !s.chars().next().unwrap().is_numeric()
     }
 
     /// Consume semicolon if present.

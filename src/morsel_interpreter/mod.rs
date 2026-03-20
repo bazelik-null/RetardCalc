@@ -38,11 +38,10 @@ impl Interpreter {
 
         // Tokenize
         let tokens = self.tokenize(input)?;
-        /*
+
         if self.debug {
             println!("[DEBUG]: Tokens: {:?}", tokens);
         }
-         */
 
         // Parse into AST
         self.symbol_table = self.parse(tokens)?;

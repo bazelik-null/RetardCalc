@@ -39,10 +39,21 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, String> {
                 tokens.push(classify_identifier(&ident));
             }
             // Operators and punctuation
-            '+' | '-' | '*' | '/' | '%' | '^' | '(' | ')' | '{' | '}' | ',' | '=' | ';' | ':' => {
+            '+' | '-' | '*' | '/' | '%' | '^' | '(' | ')' | '{' | '}' | ',' | '=' | ';' => {
                 chars.next();
                 let op = parse_operator(ch, &tokens)?;
                 tokens.push(Token::SyntaxToken(op));
+            }
+            ':' => {
+                // Check if this is part of a namespace (::)
+                if chars.clone().nth(1) == Some(':') {
+                    // This will be handled as part of identifier parsing
+                    return Err("Unexpected '::' outside of identifier context".to_string());
+                } else {
+                    chars.next();
+                    let op = parse_operator(ch, &tokens)?;
+                    tokens.push(Token::SyntaxToken(op));
+                }
             }
             _ => {
                 return Err(format!("Unexpected character: '{}'", ch));
@@ -107,17 +118,48 @@ fn parse_boolean(lexeme: &str) -> Option<bool> {
     }
 }
 
-/// Parse variable names
+/// Parse variable names with namespace support (e.g., helpers::tools::add)
 fn parse_identifier(chars: &mut std::iter::Peekable<std::str::Chars>) -> String {
     let mut ident = String::new();
 
-    while let Some(&ch) = chars.peek() {
-        match ch {
-            'a'..='z' | 'A'..='Z' | '0'..='9' | '_' => {
-                ident.push(ch);
-                chars.next();
+    loop {
+        // Parse identifier segment (alphanumeric + underscore)
+        while let Some(&ch) = chars.peek() {
+            match ch {
+                'a'..='z' | 'A'..='Z' | '0'..='9' | '_' => {
+                    ident.push(ch);
+                    chars.next();
+                }
+                _ => break,
             }
-            _ => break,
+        }
+
+        // Check for namespace separator (::)
+        if chars.clone().next() == Some(':') && chars.clone().nth(1) == Some(':') {
+            // Consume the :: and continue parsing the next segment
+            chars.next(); // consume first :
+            chars.next(); // consume second :
+            ident.push_str("::");
+
+            // Ensure there's a valid identifier after ::
+            if let Some(&ch) = chars.peek() {
+                match ch {
+                    'a'..='z' | 'A'..='Z' | '_' => {
+                        // Valid start of next segment, continue loop
+                        continue;
+                    }
+                    _ => {
+                        // Invalid character after ::, break and let parser handle error
+                        break;
+                    }
+                }
+            } else {
+                // End of input after ::, break
+                break;
+            }
+        } else {
+            // No namespace separator, we're done
+            break;
         }
     }
 

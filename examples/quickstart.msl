@@ -15,8 +15,8 @@ fn main() {
     let second = 2.2;
 
     // You can use cast functions to change types
-    let result: int = to_int(add(first, second));
+    let result: int = std::to_int(add(first, second));
 
     // Display result
-    println("Result:", result);
+    std::io::println("Result:", result);
 }

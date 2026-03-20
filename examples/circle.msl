@@ -2,41 +2,40 @@
 // To execute use ./Morsel examples/circle.msl
 // Or ./Morsel and "file examples/circle.msl"
 
+fn prompt(text: string): float {
+    std::io::println(text);
+
+    // Get user input
+    let input = std::io::input("> ");
+
+    // Convert it from string to float
+    std::to_float(input)
+}
+
 fn calculate_circle_properties(radius: float) {
-    // Calculate area: π * r²
     let area: float = pi * radius ^ 2.0;
-
-    // Calculate circumference: 2 * π * r
     let circumference: float = 2.0 * pi * radius;
-
-    // Calculate diameter
     let diameter: float = 2.0 * radius;
 
-    // Display results
-    println("Radius: ", round(radius));
-    println("Diameter: ", round(diameter));
-    println("Area: ", round(area));
-    println("Circumference: ", round(circumference));
-    println("---");
+    let sphere_volume: float = (4.0 / 3.0) * pi * (radius ^ 3.0);
+    let sphere_surface_area: float = 4.0 * pi * (radius ^ 2.0);
+
+    // Print results
+    std::io::println("---");
+    std::io::println("Radius: ", std::math::round(radius));
+    std::io::println("Diameter: ", std::math::round(diameter));
+    std::io::println("Area: ", std::math::round(area));
+    std::io::println("Circumference: ", std::math::round(circumference));
+    std::io::println("Sphere Volume: ", std::math::round(sphere_volume));
+    std::io::println("Sphere Surface Area: ", std::math::round(sphere_surface_area));
+    std::io::println("---");
 }
 
 fn main() {
-    // Test with different circle sizes
-    let small_circle = 5.0;
-    let medium_circle = 10.0;
-    let large_circle = 25.5;
+    // Create a prompt
+    let circle = prompt("Enter circle radius");
 
-    // Calculate properties for each circle
-    calculate_circle_properties(small_circle);
-    calculate_circle_properties(medium_circle);
-    calculate_circle_properties(large_circle);
-
-    // Find the largest radius
-    let max_radius = max(small_circle, medium_circle, large_circle);
-    println("Largest radius: ", round(max_radius));
-
-    // Calculate area of largest circle
-    let largest_area: float = pi * max_radius ^ 2.0;
-    println("Area of largest circle: ", round(largest_area));
+    // Calculate properties
+    calculate_circle_properties(circle);
 }
 

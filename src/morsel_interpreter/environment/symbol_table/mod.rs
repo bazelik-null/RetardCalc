@@ -52,7 +52,7 @@ impl SymbolTable {
             report.push_str("├─ FUNCTIONS\n");
 
             for func in self.functions.all_functions() {
-                if func.is_builtin {
+                if func.is_builtin() {
                     continue;
                 }
 

@@ -8,11 +8,11 @@ fn add(x: int, y: int): int {
 }
 
 fn greet(name: string) {
-    println("Hello,", name, "!");
+    std::io::std::io::println("Hello,", name, "!");
 }
 
 fn max_of_three(a: int, b: int, c: int) {
-    max(a, b, c)
+    std::math::max(a, b, c)
 }
 
 fn rectangle_area(length: int, width: int) {
@@ -24,39 +24,39 @@ fn celsius_to_fahrenheit(celsius: float) {
 }
 
 fn main() {
-    println("== What is a Function? ==");
-    println("A function holds a piece of code that does a specific task.");
-    println("A function takes some data as input, the code inside the function does something with the data, and then the result is returned.\n");
+    std::io::println("== What is a Function? ==");
+    std::io::println("A function holds a piece of code that does a specific task.");
+    std::io::println("A function takes some data as input, the code inside the function does something with the data, and then the result is returned.\n");
 
-    println("== Simple Functions ==");
+    std::io::println("== Simple Functions ==");
     let result1 = add(5, 3);
-    println("5 + 3 =", result1);
+    std::io::println("5 + 3 =", result1);
 
     let result2 = add(10, 20);
-    println("10 + 20 =", result2);
+    std::io::println("10 + 20 =", result2);
 
-    println("\n== Functions Make Code Reusable ==");
+    std::io::println("\n== Functions Make Code Reusable ==");
     greet("Alice");
     greet("Bob");
     greet("Charlie");
 
-    println("\n== Functions with Multiple Parameters ==");
+    std::io::println("\n== Functions with Multiple Parameters ==");
     let largest = max_of_three(15, 42, 8);
-    println("Largest of 15, 42, 8 is:", largest);
+    std::io::println("Largest of 15, 42, 8 is:", largest);
 
-    println("\n== Functions that Return Values ==");
+    std::io::println("\n== Functions that Return Values ==");
     let area = rectangle_area(10, 5);
-    println("Area of 10 x 5 rectangle:", area);
-    println("Area of 7 x 3 rectangle:", rectangle_area(7, 3));
+    std::io::println("Area of 10 x 5 rectangle:", area);
+    std::io::println("Area of 7 x 3 rectangle:", rectangle_area(7, 3));
 
-    println("\n== A Practical Example ==");
+    std::io::println("\n== A Practical Example ==");
     let temp_c = 25.0;
     let temp_f = celsius_to_fahrenheit(temp_c);
-    println(temp_c, "°C is", temp_f, "°F");
+    std::io::println(temp_c, "°C is", temp_f, "°F");
 
     let another_temp = celsius_to_fahrenheit(0.0);
-    println("0°C is", another_temp, "°F");
+    std::io::println("0°C is", another_temp, "°F");
 
-    println("\n== The main() Function ==");
-    println("Every program needs a main() function. That's where your program starts.");
+    std::io::println("\n== The main() Function ==");
+    std::io::println("Every program needs a main() function. That's where your program starts.");
 }

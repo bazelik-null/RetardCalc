@@ -18,40 +18,35 @@ impl Value {
         Type::of(self)
     }
 
-    /// Convert to f64 (only for numeric types)
-    /// Integers are automatically promoted to floats.
+    /// Convert to f64 (works with any type)
     pub fn to_float(&self) -> Result<f64, String> {
         match self {
             Value::Float(f) => Ok(*f),
             Value::Integer(i) => Ok(*i as f64),
-            _ => Err(format!("Cannot convert {} to float", self.type_of())),
+            Value::String(s) => s
+                .parse::<f64>()
+                .map_err(|_| format!("Cannot convert string '{}' to float", s)),
+            Value::Boolean(b) => Ok(if *b { 1.0 } else { 0.0 }),
+            Value::Null => Err("Cannot convert null to float".to_string()),
         }
     }
 
-    /// Convert to integer (only for numeric types)
-    /// Floats are truncated to integers.
+    /// Convert to integer (works with any type)
     pub fn to_integer(&self) -> Result<i64, String> {
         match self {
             Value::Integer(i) => Ok(*i),
             Value::Float(f) => Ok(*f as i64),
-            _ => Err(format!("Cannot convert {} to integer", self.type_of())),
+            Value::String(s) => s
+                .parse::<i64>()
+                .map_err(|_| format!("Cannot convert string '{}' to integer", s)),
+            Value::Boolean(b) => Ok(if *b { 1 } else { 0 }),
+            Value::Null => Err("Cannot convert null to integer".to_string()),
         }
     }
 
-    /// Convert to string (only for string types)
-    pub fn to_string_value(&self) -> Result<String, String> {
-        match self {
-            Value::String(s) => Ok(s.clone()),
-            _ => Err(format!("Cannot convert {} to string", self.type_of())),
-        }
-    }
-
-    /// Convert to boolean (only for boolean types)
+    /// Convert to boolean (works with any type)
     pub fn to_bool(&self) -> Result<bool, String> {
-        match self {
-            Value::Boolean(b) => Ok(*b),
-            _ => Err(format!("Cannot convert {} to boolean", self.type_of())),
-        }
+        Ok(self.is_truthy())
     }
 
     /// Convert to string for display purposes

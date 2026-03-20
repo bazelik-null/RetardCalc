@@ -9,22 +9,23 @@ Here's your improved README with the changes applied:
 >
 > Work in progress. Check [Roadmap](#roadmap)
 
-## Introduction
+# Introduction
 
 **Morsel** is an **interpreted** programming language built in **Rust** as my first Rust project. It combines the
 performance and memory safety of Rust with an easy, expression-based syntax inspired by C, Go, and Rust itself.
 
-## Table of Contents
+# Table of Contents
 
 - [Quick Start](#quick-start)
 - [Features](#features)
 - [Getting Started](#getting-started)
 - [Syntax Highlighting Setup](#syntax-highlighting-setup)
 - [Language Reference](#language-reference)
+- [Standard library](#standard-library)
 - [Project Structure](#project-structure)
 - [Roadmap](#roadmap)
 
-## Quick Start
+# Quick Start
 
 Here's a simple Morsel program:
 
@@ -36,8 +37,10 @@ fn add(x: int, y: int) {
 fn main() {
     let first = 1;
     let second = 2;
+    
     let result = add(first, second);
-    println("Result:", result);
+    
+    std::io::println("Result:", result);
 }
 ```
 
@@ -49,16 +52,16 @@ Run it with:
 
 Check [complete example](#complete-example) for comments with explained code
 
-## Features
+# Features
 
 - **Strict typing:** Declare, assign, and manipulate variables with full type safety
 - **Functions:** Function support with type-safe arguments and implicit return values
 - **Immutability by default:** Variables are immutable unless explicitly marked as `mut`
 - **Built in Rust:** RUST🚀 RUSTRUSTRUST BLAZINGLY FAST🚀🚀 YEEEAH MEMORY SAFETY🏳️‍🌈
-- **Math support:** Full support for arithmetic, trigonometric, logarithmic, and exponential functions
+- **Math standard library:** Full support for arithmetic, trigonometric, logarithmic, and exponential functions
 - **Familiar syntax:** Morsel inherits syntax from C, Rust, and Go
 
-## Getting Started
+# Getting Started
 
 1. **Install Rust**
    ```
@@ -88,6 +91,7 @@ Check [complete example](#complete-example) for comments with explained code
       ```bash
         ./target/release/Morsel examples/variables.msl
         ./target/release/Morsel examples/functions.msl
+        ./target/release/Morsel examples/calculator.msl
         ./target/release/Morsel examples/circle.msl
       ```
 
@@ -97,7 +101,7 @@ Check [complete example](#complete-example) for comments with explained code
    ./target/release/Morsel
    ```
 
-## Syntax Highlighting Setup
+# Syntax Highlighting Setup
 
 ### VS Code
 
@@ -126,9 +130,18 @@ Files with `.morsel` or `.msl` extensions will now have syntax highlighting.
 
 **Note:** The TextMate grammar (`morsel.tmLanguage.json`) is shared across all editors for consistency.
 
-## Language Reference
+# Language Reference
 
-### Variables and Types
+## Data Types
+
+- **Integer:** `int` - 64-bit integer
+- **Float:** `float` - 64-bit floating-point number
+- **String:** `string` - Text data
+- **Boolean:** `bool` - Boolean value (true/false)
+
+**Note:** `null` and `any` types exist but cannot be used for variable initialization.
+
+## Variables
 
 #### Variable Declaration
 
@@ -138,29 +151,20 @@ let mut name: type = value;
 
 - **`mut` (optional):** Makes the variable mutable so it can be reassigned later
 - **`name` (required):** Variable name. Required for variable referencing
-- **`: type` (optional):** Specifies the data type. If omitted, the type is inferred (works only with literals)
+- **`: type` (optional):** Specifies the data type. If omitted, the type is inferred
 - **`value` (required):** All variable declarations must include an initial value or expression
-
-#### Available Data Types
-
-- **Integer:** `int` - 64-bit integer
-- **Float:** `float` - 64-bit floating-point number
-- **String:** `string` - Text data
-- **Boolean:** `bool` - Boolean value (true/false)
-
-**Note:** `null` and `any` types exist but cannot be used for variable initialization.
 
 #### Variable Assignment
 
 - **Assignment:** `x = y;` - Reassign an existing variable to a new value (variable must be declared as `mut` and types
   should match)
 
-### Functions
+## Functions
 
 #### Function Declaration
 
 ```
-fn name(argument: type, ...) {
+fn name(argument: type, ...): return_type {
     code
 }
 ```
@@ -170,6 +174,7 @@ fn name(argument: type, ...) {
     - **`argument` (required):** Argument name. Required for variable referencing
     - **`: type` (required):** Specifies the data type. Can't be omitted
 - **`...` (optional):** There can be unlimited amount of arguments separated by comma
+- **`: return_type` (optional):** Specifies return type. If omitted, the type is inferred
 - **`{ code }` (required):** Code which will be executed at function call
 
 Functions return the value of their last expression implicitly.
@@ -180,9 +185,7 @@ Functions return the value of their last expression implicitly.
 // Single-line comment
 ```
 
-### Operations
-
-#### Arithmetic
+# Operations
 
 - **Addition:** `x + y`
 - **Subtraction:** `x - y`
@@ -190,10 +193,14 @@ Functions return the value of their last expression implicitly.
 - **Division:** `x / y`
 - **Modulo (remainder):** `x % y`
 - **Negation:** `-x`
+- **Exponentiation:** `x ^ y` - Raises x to the power of y
+
+# Standard library
+
+## std::math
 
 #### Exponents and Roots
 
-- **Exponentiation:** `x ^ y` - Raises x to the power of y
 - **Square root:** `sqrt(x)` - Returns the square root of x
 - **Cubic root:** `cbrt(x)` - Returns the cube root of x
 - **Nth root:** `root(x, y)` - Returns the y-th root of x
@@ -221,19 +228,20 @@ Functions return the value of their last expression implicitly.
 - **Maximum:** `max(x, ...)` - Returns the largest of the given values
 - **Minimum:** `min(x, ...)` - Returns the smallest of the given values
 
-#### Type casting
+## std::io
+
+- **Print:** `print(x, ...)` - Outputs x to the console
+- **Print line:** `println(x, ...)` - Outputs x to the console and appends newline
+- **Input:** `input(prompt)` - Reads a line from standard input with the given prompt
+
+## std
 
 - **To int:** `to_int(x)` - Converts x to int
 - **To float:** `to_float(x)` - Converts x to float
 - **To bool:** `to_bool(x)` - Converts x to bool
 - **To string:** `to_string(x)` - Converts x to string
 
-#### I/O
-
-- **Print:** `print(x, ...)` - Outputs x to the console
-- **Print line:** `println(x, ...)` - Outputs x to the console and appends /n
-
-## Complete Example
+# Complete Example
 
 ```morsel
 // Introduction to Language
@@ -253,16 +261,16 @@ fn main() {
     let second = 2.2;
 
     // You can use cast functions to change types
-    let result: int = to_int(add(first, second));
+    let result: int = std::to_int(add(first, second));
 
     // Display result
-    println("Result:", result);
+    std::io::println("Result:", result);
 }
 ```
 
-## Project Structure
+# Project Structure
 
-#### Pipeline
+### Pipeline
 
 **Morsel** evaluates expressions through a three-stage pipeline:
 
@@ -287,7 +295,7 @@ Input -> [Lexer] -> Tokens -> [Parser] -> SymbolTable -> [Executor] -> Result
 `Interpreter` wraps this pipeline. Use `execute()` to build and execute source code. Enable debug mode to see
 intermediate outputs at each stage.
 
-#### File structure
+### File structure
 
 - **Entry point** (`src/main.rs`) - Launches CLI or evaluates file from argument
 - **Command Line Interface** (`src/cli/`) - User interface that accepts commands and file inputs
@@ -299,7 +307,7 @@ intermediate outputs at each stage.
         - **Symbol table** (`src/morsel_core/environment/symbol_table/`) - Manages scopes, variables and function tables
     - **Executor** (`src/morsel_core/runtime/`) - Executes AST
 
-## Roadmap
+# Roadmap
 
 - [x] Math expressions (x+y, x*y)
 - [x] Built-in math library (sin(), round())
@@ -307,7 +315,7 @@ intermediate outputs at each stage.
 - [x] Type safety
 - [x] Type casting
 - [x] Functions
-- [ ] Built-in std library (print(), input())
+- [x] Built-in std library (print(), input())
 - [ ] Control flow (if/else statements, loops, etc)
 - [ ] Arrays and data structures
 - [ ] Imports
@@ -315,6 +323,6 @@ intermediate outputs at each stage.
 - [ ] Performance optimizations
 - [ ] **First release**
 
-## Screenshot
+# Screenshot
 
 <img src="doc/img/screenshot.png">

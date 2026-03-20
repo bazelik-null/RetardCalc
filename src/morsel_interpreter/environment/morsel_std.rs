@@ -100,23 +100,40 @@ impl BuiltinFunctionDispatcher {
     }
 
     pub fn register_builtins(symbols: &mut FunctionSymbolTable) {
-        for &(name, namespace, param_count, return_type, param_type, is_variadic) in
-            BUILTIN_FUNCTIONS
-        {
-            let params = (0..param_count)
-                .map(|i| FunctionParamSymbol::new(format!("arg{}", i), param_type))
-                .collect();
+        let builtins: Vec<FunctionSymbol> = BUILTIN_FUNCTIONS
+            .iter()
+            .map(
+                |&(name, namespace, param_count, return_type, param_type, is_variadic)| {
+                    let params = (0..param_count)
+                        .map(|i| FunctionParamSymbol::new(format!("arg{}", i), param_type))
+                        .collect();
 
-            let mut func = FunctionSymbol::builtin(
-                name.to_string(),
-                namespace.to_string(),
-                params,
-                return_type,
-            );
-            func.is_variadic = is_variadic;
+                    if is_variadic {
+                        FunctionSymbol::new(
+                            name.to_string(),
+                            namespace.to_string(),
+                            params,
+                            return_type,
+                            0,
+                            None,
+                            true,
+                        )
+                    } else {
+                        FunctionSymbol::new(
+                            name.to_string(),
+                            namespace.to_string(),
+                            params,
+                            return_type,
+                            0,
+                            None,
+                            false,
+                        )
+                    }
+                },
+            )
+            .collect();
 
-            let _ = symbols.define(func);
-        }
+        let _ = symbols.define_batch(builtins);
     }
 
     // ---- Math Functions Implementation ----

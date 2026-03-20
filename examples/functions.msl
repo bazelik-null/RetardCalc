@@ -8,7 +8,7 @@ fn add(x: int, y: int): int {
 }
 
 fn greet(name: string) {
-    std::io::std::io::println("Hello,", name, "!");
+    std::io::println("Hello,", name, "!");
 }
 
 fn max_of_three(a: int, b: int, c: int) {

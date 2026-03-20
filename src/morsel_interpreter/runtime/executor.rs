@@ -2,36 +2,26 @@
 
 use crate::morsel_interpreter::environment::morsel_std::BuiltinFunctionDispatcher;
 use crate::morsel_interpreter::environment::symbol_table::SymbolTable;
-use crate::morsel_interpreter::environment::symbol_table::function_symbol::FunctionSymbol;
-use crate::morsel_interpreter::environment::symbol_table::variable_symbol::VariableSymbol;
+use crate::morsel_interpreter::environment::symbol_table::function_symbol::FunctionMetadata;
 use crate::morsel_interpreter::environment::types::Type;
 use crate::morsel_interpreter::environment::value::Value;
 use crate::morsel_interpreter::parser::ast_node::Node;
 
 /// Executor which evaluates AST using only SymbolTable
-pub struct Executor {
-    symbol_table: SymbolTable,
+pub struct Executor<'a> {
+    symbol_table: &'a mut SymbolTable,
 }
 
-impl Executor {
-    pub fn new(symbol_table: SymbolTable) -> Self {
-        let mut executor = Executor { symbol_table };
-        executor.symbol_table.push_scope(); // Global scope
-        executor
+impl<'a> Executor<'a> {
+    pub fn new(symbol_table: &'a mut SymbolTable) -> Self {
+        symbol_table.push_scope(); // Global scope
+        Executor { symbol_table }
     }
 
     /// Main entry point. Executes the program by calling main()
     pub fn execute(&mut self) -> Result<(), String> {
-        // Look for main function in symbol table
-        let function = self
-            .symbol_table
-            .functions
-            .lookup("main")
-            .ok_or_else(|| format!("Function '{}' not found", "main"))?
-            .clone();
-
         // Call main()
-        self.evaluate_function("main", &function, &[])?;
+        self.evaluate_function("main", &[])?;
 
         Ok(())
     }
@@ -45,13 +35,13 @@ impl Executor {
     fn eval_with_type(&mut self, node: &Node, target_type: Option<Type>) -> Result<Value, String> {
         match node {
             Node::Literal(value) => Ok(value.clone()),
-            Node::Reference(name) => self.get_variable(name),
+            Node::Reference(name) => self.get_variable(name).cloned(),
             Node::Block(statements) => self.eval_block(statements),
             Node::LetBinding {
                 reference: name,
                 value,
                 type_annotation,
-            } => self.eval_let(name.clone(), value, type_annotation),
+            } => self.eval_let(name.parse().unwrap(), value, type_annotation),
             Node::Assignment { name, value } => self.eval_assignment(name, value),
             Node::Call { name, args } => self.eval_call(name, args, target_type),
             Node::FuncBinding() => Ok(Value::Null),
@@ -59,7 +49,7 @@ impl Executor {
     }
 
     /// Get a variable value from the symbol table
-    fn get_variable(&self, name: &str) -> Result<Value, String> {
+    fn get_variable(&self, name: &str) -> Result<&Value, String> {
         self.symbol_table
             .variables
             .get_value(name)
@@ -90,48 +80,28 @@ impl Executor {
         // Evaluate the expression with target type context
         let result = self.eval_with_type(value, Some(*type_annotation))?;
 
-        let result_type = result.type_of();
-
-        // Check if types are compatible (same type or numeric compatibility)
-        if !self.is_type_compatible(result_type, *type_annotation) {
-            return Err(format!(
-                "Type mismatch in let binding '{}': expected {}, got {}",
-                name, type_annotation, result_type
-            ));
-        }
-
         // Coerce to target type if needed
-        let coerced_value = self.coerce_value(result, *type_annotation)?;
+        let coerced_value = self.coerce_value(&result, *type_annotation)?;
 
         // Create variable symbol in current scope
-        let var_symbol = VariableSymbol::new(
+        self.symbol_table.variables.define_with_value(
             name.clone(),
             *type_annotation,
             false,
-            self.symbol_table.depth(),
-        );
-
-        // Define and set value in one operation
-        self.symbol_table
-            .variables
-            .define_with_value(var_symbol, coerced_value.clone())?;
+            coerced_value.clone(),
+        )?;
 
         Ok(coerced_value)
     }
 
     /// Evaluate an assignment with type checking
     fn eval_assignment(&mut self, name: &str, value: &Node) -> Result<Value, String> {
-        // Get variable metadata
-        if !self.symbol_table.variables.exists(name) {
-            return Err(format!("Variable '{}' not found", name));
-        }
-
         // Get the expected type from the variable symbol
         let var_symbol = self
             .symbol_table
             .variables
             .lookup(name)
-            .ok_or_else(|| format!("Variable '{}' symbol not found", name))?;
+            .ok_or_else(|| format!("Variable '{}' not found", name))?;
 
         let expected_type = var_symbol.type_annotation;
 
@@ -141,7 +111,7 @@ impl Executor {
         let result_type = result.type_of();
 
         // Check if types are compatible
-        if !self.is_type_compatible(result_type, expected_type) {
+        if !result_type.is_compatible_with(&expected_type) {
             return Err(format!(
                 "Type mismatch in assignment to '{}': expected {}, got {}",
                 name, expected_type, result_type
@@ -149,7 +119,7 @@ impl Executor {
         }
 
         // Coerce to target type if needed
-        let coerced_value = self.coerce_value(result, expected_type)?;
+        let coerced_value = self.coerce_value(&result, expected_type)?;
 
         // Update value in symbol table
         self.symbol_table
@@ -203,55 +173,36 @@ impl Executor {
         let function = self
             .symbol_table
             .functions
-            .lookup(name)
-            .ok_or_else(|| format!("Function '{}' not found", name))?
-            .clone();
+            .lookup_with_namespace(name, None)
+            .ok_or_else(|| format!("Function '{}' not found", name))?;
 
-        // Validate arguments using the function table
-        self.symbol_table
-            .functions
-            .validate_arg_count(name, args.len())?;
-
-        if function.is_builtin() {
-            return self.evaluate_builtin_function(
-                function.name.as_str(),
-                function.namespace.as_str(),
+        // Execute builtin or user-defined function
+        if function.metadata.is_builtin {
+            self.evaluate_builtin_function(
+                &function.metadata.name,
+                &function.metadata.namespace,
                 args,
                 target_type,
-            );
+            )
+        } else {
+            self.evaluate_function(name, args)
         }
-
-        self.evaluate_function(name, &function, args)
-    }
-
-    /// Check if two types are compatible
-    fn is_type_compatible(&self, from: Type, to: Type) -> bool {
-        if from == to {
-            return true;
-        }
-
-        // Allow numeric type compatibility
-        matches!(
-            (from, to),
-            (Type::Integer, Type::Float)
-                | (Type::Float, Type::Integer)
-                | (Type::Integer, Type::Integer)
-                | (Type::Float, Type::Float)
-        )
     }
 
     /// Coerce a value to the target type
-    fn coerce_value(&self, value: Value, target_type: Type) -> Result<Value, String> {
+    fn coerce_value(&self, value: &Value, target_type: Type) -> Result<Value, String> {
         let value_type = value.type_of();
 
+        // Fast path: no coercion needed
         if value_type == target_type {
-            return Ok(value);
+            return Ok(value.clone());
         }
 
-        match (value, target_type) {
-            (Value::Integer(i), Type::Float) => Ok(Value::Float(i as f64)),
-            (Value::Float(f), Type::Integer) => Ok(Value::Integer(f as i64)),
-            (v, _) => Err(format!("Cannot coerce {} to {}", v.type_of(), target_type)),
+        // Coercion paths
+        match (&value, target_type) {
+            (Value::Integer(i), Type::Float) => Ok(Value::Float(*i as f64)),
+            (Value::Float(f), Type::Integer) => Ok(Value::Integer(*f as i64)),
+            _ => Err(format!("Cannot coerce {} to {}", value_type, target_type)),
         }
     }
 
@@ -332,17 +283,15 @@ impl Executor {
         right: &Value,
         target_type: Option<Type>,
     ) -> Type {
-        // If target type is specified and is numeric, use it
-        if let Some(Type::Integer | Type::Float) = target_type {
-            return target_type.unwrap();
-        }
-
-        // Otherwise, preserve integer type when both operands are integers
-        if left.type_of() == Type::Integer && right.type_of() == Type::Integer {
-            Type::Integer
-        } else {
-            Type::Float
-        }
+        target_type
+            .filter(|t| matches!(t, Type::Integer | Type::Float))
+            .unwrap_or_else(|| {
+                if left.type_of() == Type::Integer && right.type_of() == Type::Integer {
+                    Type::Integer
+                } else {
+                    Type::Float
+                }
+            })
     }
 
     /// Apply unary minus with target type context
@@ -393,58 +342,56 @@ impl Executor {
         }
     }
 
-    /// Evaluate a user-defined function with explicit type checking
-    fn evaluate_function(
-        &mut self,
-        name: &str,
-        function: &FunctionSymbol,
-        args: &[Value],
-    ) -> Result<Value, String> {
-        // Get function implementation
-        let impl_node = function
-            .implementation
-            .as_ref()
-            .ok_or_else(|| format!("Undefined implementation for function: {}", name))?
-            .clone();
+    /// Evaluate a user-defined function
+    fn evaluate_function(&mut self, fq_name: &str, args: &[Value]) -> Result<Value, String> {
+        // Extract and clone what we need
+        let (metadata, implementation) = {
+            let function = self
+                .symbol_table
+                .functions
+                .lookup(fq_name)
+                .ok_or_else(|| format!("Function '{}' not found", fq_name))?;
 
-        // Push function scope
-        self.symbol_table.push_scope();
-
-        // Bind parameters with explicit type checking
-        for (param, arg_value) in function.parameters.iter().zip(args.iter()) {
-            let arg_type = arg_value.type_of();
-
-            // Check type compatibility
-            if !self.is_type_compatible(arg_type, param.type_annotation) {
-                self.symbol_table.pop_scope();
-                return Err(format!(
-                    "Function '{}' parameter '{}' type mismatch: expected {}, got {}",
-                    name, param.name, param.type_annotation, arg_type
-                ));
+            if function.implementation.is_none() {
+                return Err(format!("Function '{}' has no implementation", fq_name));
             }
 
-            // Coerce argument to parameter type if needed
-            let coerced_arg = self.coerce_value(arg_value.clone(), param.type_annotation)?;
+            (function.metadata.clone(), function.implementation.clone())
+        };
 
-            // Create parameter symbol in current scope and set value
-            let param_symbol = VariableSymbol::new(
-                param.name.clone(),
-                param.type_annotation,
-                false, // Parameters are immutable
-                self.symbol_table.depth(),
-            );
+        self.symbol_table.push_scope();
 
-            self.symbol_table
-                .variables
-                .define_with_value(param_symbol, coerced_arg)?;
+        if let Err(e) = self.bind_parameters(&metadata, args) {
+            self.symbol_table.pop_scope();
+            return Err(e);
         }
 
-        // Evaluate function body
-        let result = self.eval(&impl_node);
-
-        // Pop function scope
+        let result = self.eval(implementation.as_ref().unwrap());
         self.symbol_table.pop_scope();
-
         result
+    }
+
+    /// Bind function parameters
+    fn bind_parameters(
+        &mut self,
+        metadata: &FunctionMetadata,
+        args: &[Value],
+    ) -> Result<(), String> {
+        for (param, arg_value) in metadata.parameters.iter().zip(args.iter()) {
+            let coerced_arg = if arg_value.type_of() == param.type_annotation {
+                arg_value.clone()
+            } else {
+                self.coerce_value(arg_value, param.type_annotation)?
+            };
+
+            self.symbol_table.variables.define_with_value(
+                param.name.clone(),
+                param.type_annotation,
+                false,
+                coerced_arg,
+            )?;
+        }
+
+        Ok(())
     }
 }

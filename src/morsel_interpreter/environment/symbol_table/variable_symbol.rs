@@ -4,35 +4,19 @@ use crate::morsel_interpreter::environment::types::Type;
 use crate::morsel_interpreter::environment::value::Value;
 use std::collections::HashMap;
 
-/// Represents a variable symbol with RTTI
+/// Variable symbol with metadata
 #[derive(Clone, Debug)]
 pub struct VariableSymbol {
     pub name: String,
     pub type_annotation: Type,
     pub mutable: bool,
-    pub scope_depth: usize,
+    pub scope_depth: u8,
     pub initialized: bool,
-    pub value: Option<Value>,
+    pub value: Option<Box<Value>>,
 }
 
 impl VariableSymbol {
-    pub fn new(name: String, type_annotation: Type, mutable: bool, scope_depth: usize) -> Self {
-        VariableSymbol {
-            name,
-            type_annotation,
-            mutable,
-            scope_depth,
-            initialized: true,
-            value: None,
-        }
-    }
-
-    pub fn uninitialized(
-        name: String,
-        type_annotation: Type,
-        mutable: bool,
-        scope_depth: usize,
-    ) -> Self {
+    pub fn new(name: String, type_annotation: Type, mutable: bool, scope_depth: u8) -> Self {
         VariableSymbol {
             name,
             type_annotation,
@@ -45,55 +29,98 @@ impl VariableSymbol {
 
     /// Set the runtime value
     pub fn set_value(&mut self, val: Value) {
-        self.value = Some(val);
+        self.value = Some(Box::new(val));
         self.initialized = true;
     }
 
     /// Get the runtime value
     pub fn get_value(&self) -> Option<&Value> {
-        self.value.as_ref()
+        self.value.as_ref().map(|b| b.as_ref())
     }
 
     /// Take ownership of value (for returns)
     pub fn take_value(&mut self) -> Option<Value> {
-        self.value.take()
+        self.value.take().map(|b| *b)
     }
 }
 
 /// Scoped symbol table for variables
 #[derive(Clone)]
 pub struct VariableSymbolTable {
+    // Stack of scope levels, each containing variable names at that depth
     scopes: Vec<HashMap<String, VariableSymbol>>,
-    current_depth: usize,
 }
 
 impl VariableSymbolTable {
     pub fn new() -> Self {
         VariableSymbolTable {
-            scopes: vec![HashMap::new()],
-            current_depth: 0,
+            scopes: vec![HashMap::with_capacity(256)],
         }
     }
 
     /// Define a variable with initial value
     pub fn define_with_value(
         &mut self,
-        mut symbol: VariableSymbol,
+        name: String,
+        type_annotation: Type,
+        mutable: bool,
         value: Value,
     ) -> Result<(), String> {
+        if let Some(scope) = self.scopes.last()
+            && scope.contains_key(&name)
+        {
+            return Err(format!(
+                "Variable '{}' already defined in current scope",
+                name
+            ));
+        }
+
+        let mut symbol = VariableSymbol::new(name.clone(), type_annotation, mutable, self.depth());
         symbol.set_value(value);
-        self.define(symbol)
+
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(name, symbol);
+        }
+
+        Ok(())
     }
 
-    /// Get a variable's value (searches all scopes from inner to outer)
-    pub fn get_value(&self, name: &str) -> Option<Value> {
-        self.scopes
-            .iter()
-            .rev()
-            .find_map(|scope| scope.get(name)?.get_value().cloned())
+    /// Define uninitialized variable
+    pub fn define(
+        &mut self,
+        name: String,
+        type_annotation: Type,
+        mutable: bool,
+    ) -> Result<(), String> {
+        if let Some(scope) = self.scopes.last()
+            && scope.contains_key(&name)
+        {
+            return Err(format!(
+                "Variable '{}' already defined in current scope",
+                name
+            ));
+        }
+
+        let symbol = VariableSymbol::new(name.clone(), type_annotation, mutable, self.depth());
+
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(name, symbol);
+        }
+
+        Ok(())
     }
 
-    /// Set a variable's value (searches all scopes from inner to outer)
+    /// Get variable value by name (searches from innermost to outermost scope)
+    pub fn get_value(&self, name: &str) -> Option<&Value> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(symbol) = scope.get(name) {
+                return symbol.get_value();
+            }
+        }
+        None
+    }
+
+    /// Set variable value by name (searches from innermost to outermost scope)
     pub fn set_value(&mut self, name: &str, value: Value) -> Result<(), String> {
         for scope in self.scopes.iter_mut().rev() {
             if let Some(symbol) = scope.get_mut(name) {
@@ -101,81 +128,35 @@ impl VariableSymbolTable {
                 return Ok(());
             }
         }
-        Err(format!("Variable '{}' not found in any scope", name))
+        Err(format!("Variable '{}' not found", name))
     }
 
-    /// Get metadata without value
-    pub fn get_metadata(&self, name: &str) -> Option<VariableSymbol> {
-        self.scopes
-            .iter()
-            .rev()
-            .find_map(|scope| scope.get(name).cloned())
-    }
-
-    /// Check if variable is initialized
-    pub fn is_initialized(&self, name: &str) -> bool {
-        self.scopes
-            .iter()
-            .rev()
-            .find_map(|scope| scope.get(name).map(|s| s.initialized))
-            .unwrap_or(false)
-    }
-
-    /// Push a new scope
-    pub fn push_scope(&mut self) {
-        self.current_depth += 1;
-        self.scopes.push(HashMap::new());
-    }
-
-    /// Pop the current scope (keeps global scope)
-    pub fn pop_scope(&mut self) -> Option<HashMap<String, VariableSymbol>> {
-        if self.scopes.len() > 1 {
-            self.current_depth -= 1;
-            self.scopes.pop()
-        } else {
-            None
-        }
-    }
-
-    /// Get current scope depth
-    pub fn depth(&self) -> usize {
-        self.current_depth
-    }
-
-    /// Define a variable in the current scope
-    pub fn define(&mut self, symbol: VariableSymbol) -> Result<(), String> {
-        let current_scope = self
-            .scopes
-            .last_mut()
-            .ok_or("No active scope".to_string())?;
-
-        if current_scope.contains_key(&symbol.name) {
-            return Err(format!(
-                "Variable '{}' is already defined in the current scope",
-                symbol.name
-            ));
-        }
-
-        current_scope.insert(symbol.name.clone(), symbol);
-        Ok(())
-    }
-
-    /// Lookup a variable (searches from innermost to outermost scope)
+    /// Get variable metadata (searches from innermost to outermost scope)
     pub fn lookup(&self, name: &str) -> Option<&VariableSymbol> {
-        self.scopes.iter().rev().find_map(|scope| scope.get(name))
+        for scope in self.scopes.iter().rev() {
+            if let Some(symbol) = scope.get(name) {
+                return Some(symbol);
+            }
+        }
+        None
     }
 
-    /// Lookup mutable reference (for updating initialized status)
+    /// Get mutable variable metadata (searches from innermost to outermost scope)
     pub fn lookup_mut(&mut self, name: &str) -> Option<&mut VariableSymbol> {
-        self.scopes
-            .iter_mut()
-            .rev()
-            .find_map(|scope| scope.get_mut(name))
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(symbol) = scope.get_mut(name) {
+                return Some(symbol);
+            }
+        }
+        None
     }
 
     /// Check if variable exists in any scope
     pub fn exists(&self, name: &str) -> bool {
-        self.scopes.iter().any(|scope| scope.contains_key(name))
+        self.scopes
+            .iter()
+            .rev()
+            .any(|scope| scope.contains_key(name))
     }
 
     /// Check if variable exists in current scope only
@@ -186,26 +167,26 @@ impl VariableSymbolTable {
             .unwrap_or(false)
     }
 
-    /// Get all variables in current scope
-    pub fn current_scope_vars(&self) -> Vec<&VariableSymbol> {
-        self.scopes
-            .last()
-            .map(|scope| scope.values().collect())
-            .unwrap_or_default()
+    /// Push new scope
+    pub fn push_scope(&mut self) {
+        if self.scopes.len() == u8::MAX as usize {
+            panic!("[ERROR]: Maximum scope depth exceeded");
+        }
+        self.scopes.push(HashMap::with_capacity(64));
     }
 
-    /// Get all variables (all scopes)
-    pub fn all_vars(&self) -> Vec<&VariableSymbol> {
-        self.scopes
-            .iter()
-            .flat_map(|scope| scope.values())
-            .collect()
+    /// Pop current scope
+    pub fn pop_scope(&mut self) -> Option<HashMap<String, VariableSymbol>> {
+        if self.scopes.len() > 1 {
+            Some(self.scopes.pop().unwrap())
+        } else {
+            None
+        }
     }
 
-    /// Clear all scopes except global
-    pub fn clear_local_scopes(&mut self) {
-        self.scopes.truncate(1);
-        self.current_depth = 0;
+    /// Get current scope depth
+    pub fn depth(&self) -> u8 {
+        (self.scopes.len() - 1) as u8
     }
 }
 

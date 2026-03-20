@@ -4,21 +4,20 @@ use crate::morsel_interpreter::environment::symbol_table::SymbolTable;
 use crate::morsel_interpreter::environment::symbol_table::function_symbol::{
     FunctionParamSymbol, FunctionSymbol,
 };
-use crate::morsel_interpreter::environment::symbol_table::variable_symbol::VariableSymbol;
 use crate::morsel_interpreter::environment::types::Type;
 use crate::morsel_interpreter::environment::value::Value;
 use crate::morsel_interpreter::lexer::syntax_operator::{Precedence, SyntaxOperator};
 use crate::morsel_interpreter::lexer::token::{LiteralValue, Token};
 use crate::morsel_interpreter::parser::ast_node::Node;
 
-pub struct AstBuilder {
-    pub(crate) symbol_table: SymbolTable,
+pub struct AstBuilder<'a> {
+    pub symbol_table: &'a mut SymbolTable,
     tokens: Vec<Token>,
     pos: usize,
 }
 
-impl AstBuilder {
-    pub fn new(symbol_table: SymbolTable, tokens: Vec<Token>) -> Self {
+impl<'a> AstBuilder<'a> {
+    pub fn new(symbol_table: &'a mut SymbolTable, tokens: Vec<Token>) -> Self {
         Self {
             symbol_table,
             tokens,
@@ -27,7 +26,7 @@ impl AstBuilder {
     }
 
     /// Entry point for parser. Parses all statements and returns symbol table with main function.
-    pub fn build(mut self) -> Result<SymbolTable, String> {
+    pub fn build(mut self) -> Result<&'a SymbolTable, String> {
         self.parse_block()?;
         Ok(self.symbol_table)
     }
@@ -83,16 +82,12 @@ impl AstBuilder {
         };
 
         // Register in symbol table
-        let var_symbol = VariableSymbol::new(
-            name.clone(),
-            final_type_annotation,
-            mutability,
-            self.symbol_table.depth(),
-        );
-        self.symbol_table.variables.define(var_symbol)?;
+        self.symbol_table
+            .variables
+            .define(name.clone(), final_type_annotation, mutability)?;
 
         Ok(Node::LetBinding {
-            reference: name,
+            reference: Box::from(name),
             value,
             type_annotation: final_type_annotation,
         })
@@ -137,12 +132,13 @@ impl AstBuilder {
 
         // Register function with namespace
         let func_symbol = FunctionSymbol::new(
-            name.clone(),
-            namespace.clone(),
+            name,
+            namespace,
             param_symbols,
             return_type,
             definition_depth,
-            Some(implementation.clone()),
+            Some(implementation),
+            false,
         );
         self.symbol_table.functions.define(func_symbol)?;
 
@@ -181,7 +177,10 @@ impl AstBuilder {
             ));
         }
 
-        Ok(Node::Assignment { name, value })
+        Ok(Node::Assignment {
+            name: Box::from(name),
+            value,
+        })
     }
 
     /// Check if current position is an assignment (identifier followed by =).
@@ -223,7 +222,7 @@ impl AstBuilder {
             let right = self.parse_precedence(next_min)?;
 
             left = Node::Call {
-                name: op.to_string(),
+                name: Box::from(op.to_string()),
                 args: vec![left, right],
             };
         }
@@ -287,7 +286,7 @@ impl AstBuilder {
         };
 
         Ok(Node::LetBinding {
-            reference: name,
+            reference: Box::from(name),
             value: Box::new(Node::Literal(Value::Null)),
             type_annotation,
         })
@@ -299,7 +298,7 @@ impl AstBuilder {
         let child = self.parse_primary()?;
 
         Ok(Node::Call {
-            name: op.to_string(),
+            name: Box::from(op.to_string()),
             args: vec![child],
         })
     }
@@ -311,7 +310,7 @@ impl AstBuilder {
                 let node = match value {
                     LiteralValue::Integer(v) => Node::Literal(Value::Integer(*v)),
                     LiteralValue::Float(v) => Node::Literal(Value::Float(*v)),
-                    LiteralValue::String(v) => Node::Literal(Value::String(v.clone())),
+                    LiteralValue::String(v) => Node::Literal(Value::String(v.parse().unwrap())),
                     LiteralValue::Boolean(v) => Node::Literal(Value::Boolean(*v)),
                 };
                 self.advance();
@@ -336,21 +335,21 @@ impl AstBuilder {
 
                     self.symbol_table
                         .functions
-                        .validate_arg_count(&name, args.len())?;
-                    self.symbol_table
-                        .functions
-                        .validate_param_types(&name, &arg_types)?;
+                        .validate_call(&name, &arg_types)?;
 
-                    Ok(Node::Call { name, args })
+                    Ok(Node::Call {
+                        name: Box::from(name),
+                        args,
+                    })
                 } else {
                     // Variable reference
-                    if !self.symbol_table.variables.exists(&name) {
+                    if !self.symbol_table.variables.exists_in_current_scope(&name) {
                         return Err(format!(
                             "Variable '{}' is not defined at {}",
                             name, self.pos
                         ));
                     }
-                    Ok(Node::Reference(name))
+                    Ok(Node::Reference(Box::from(name)))
                 }
             }
 
@@ -400,7 +399,10 @@ impl AstBuilder {
                     ..
                 } = arg
                 {
-                    Some(FunctionParamSymbol::new(name.clone(), *type_annotation))
+                    Some(FunctionParamSymbol::new(
+                        name.parse().unwrap(),
+                        *type_annotation,
+                    ))
                 } else {
                     None
                 }
@@ -417,13 +419,11 @@ impl AstBuilder {
                 ..
             } = arg
             {
-                let var_symbol = VariableSymbol::new(
-                    name.clone(),
+                self.symbol_table.variables.define(
+                    name.clone().parse().unwrap(),
                     *type_annotation,
                     false,
-                    self.symbol_table.depth(),
-                );
-                self.symbol_table.variables.define(var_symbol)?;
+                )?;
             }
         }
         Ok(())
@@ -473,7 +473,7 @@ impl AstBuilder {
 
             match self.peek() {
                 Some(Token::Type(n)) => {
-                    let type_annotation = n.clone().parse::<Type>()?;
+                    let type_annotation = n.parse::<Type>()?;
                     self.advance();
                     Ok(Some(type_annotation))
                 }

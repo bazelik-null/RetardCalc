@@ -6,7 +6,7 @@ use crate::morsel_interpreter::lexer::syntax_operator::SyntaxOperator;
 pub enum LiteralValue {
     Integer(i64),
     Float(f64),
-    String(String),
+    String(Box<str>),
     Boolean(bool),
 }
 

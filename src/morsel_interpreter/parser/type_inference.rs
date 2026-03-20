@@ -2,8 +2,8 @@ use crate::morsel_interpreter::environment::types::Type;
 use crate::morsel_interpreter::parser::ast_node::Node;
 use crate::morsel_interpreter::parser::builder::AstBuilder;
 
-impl AstBuilder {
-    /// Infer the type of node by recursively analyzing its structure.
+impl<'a> AstBuilder<'a> {
+    /// Infer the type of node by recursively analyzing its structure
     pub fn infer_type_from_node(&self, node: &Node) -> Result<Type, String> {
         match node {
             Node::Literal(value) => Ok(value.type_of()),
@@ -15,46 +15,9 @@ impl AstBuilder {
                 .map(|var| var.type_annotation)
                 .ok_or_else(|| format!("Variable '{}' is not defined", name)),
 
-            Node::Call { name, args } => {
-                // Check if it's a unary operator
-                if args.len() == 1 && self.is_unary_operator(name) {
-                    let operand_type = self.infer_type_from_node(&args[0])?;
-                    return self.infer_unary_op_type(name, &operand_type);
-                }
+            Node::Call { name, args } => self.infer_call_type(name, args),
 
-                // Check if it's a binary operator
-                if args.len() == 2 && self.is_binary_operator(name) {
-                    let left_type = self.infer_type_from_node(&args[0])?;
-                    let right_type = self.infer_type_from_node(&args[1])?;
-                    return self.infer_binary_op_type(name, &left_type, &right_type);
-                }
-
-                // Treat as function call
-                let func = self
-                    .symbol_table
-                    .functions
-                    .lookup(name)
-                    .ok_or_else(|| format!("Function '{}' is not defined", name))?;
-
-                Ok(func.return_type)
-            }
-
-            Node::Block(statements) => {
-                if statements.is_empty() {
-                    return Ok(Type::Unit);
-                }
-
-                // Find last non-statement expression
-                let last_expr = statements
-                    .iter()
-                    .rev()
-                    .find(|stmt| !matches!(stmt, Node::LetBinding { .. } | Node::FuncBinding()));
-
-                match last_expr {
-                    Some(expr) => self.infer_type_from_node(expr),
-                    None => Ok(Type::Unit),
-                }
-            }
+            Node::Block(statements) => self.infer_block_type(statements),
 
             // Statements return Unit type
             Node::Assignment { .. } | Node::LetBinding { .. } | Node::FuncBinding() => {
@@ -63,49 +26,107 @@ impl AstBuilder {
         }
     }
 
-    /// Infer type of binary operation with type compatibility check.
+    /// Infer type of function call or operator application
+    #[inline]
+    fn infer_call_type(&self, name: &str, args: &[Node]) -> Result<Type, String> {
+        match (name, args.len()) {
+            // Unary operators
+            ("-" | "!", 1) => {
+                let operand_type = self.infer_type_from_node(&args[0])?;
+                self.infer_unary_op_type(name, &operand_type)
+            }
+            // Binary operators
+            (
+                "+" | "-" | "*" | "/" | "%" | "^" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "&&"
+                | "||",
+                2,
+            ) => {
+                let left_type = self.infer_type_from_node(&args[0])?;
+                let right_type = self.infer_type_from_node(&args[1])?;
+                self.infer_binary_op_type(name, &left_type, &right_type)
+            }
+            // Function call (any name with any arity)
+            _ => {
+                let func = self
+                    .symbol_table
+                    .functions
+                    .lookup(name)
+                    .ok_or_else(|| format!("Function '{}' is not defined", name))?;
+                Ok(func.metadata.return_type)
+            }
+        }
+    }
+
+    /// Infer type of block (last expression determines type)
+    #[inline]
+    fn infer_block_type(&self, statements: &[Node]) -> Result<Type, String> {
+        statements
+            .last()
+            .map(|last| {
+                if matches!(last, Node::LetBinding { .. } | Node::FuncBinding()) {
+                    Ok(Type::Unit)
+                } else {
+                    self.infer_type_from_node(last)
+                }
+            })
+            .unwrap_or(Ok(Type::Unit))
+    }
+
+    /// Infer type of binary operation with type compatibility check
     fn infer_binary_op_type(
         &self,
         op: &str,
         left_type: &Type,
         right_type: &Type,
     ) -> Result<Type, String> {
-        // Require exact type match for binary operations
-        if !left_type.is_compatible_with(right_type) {
-            return Err(format!(
-                "Type mismatch in binary operation '{}': {} and {}",
-                op, left_type, right_type
-            ));
-        }
-
         match op {
             // Arithmetic operators
-            "+" | "-" | "*" | "/" | "%" | "^" => match left_type {
-                Type::Integer | Type::Float => Ok(*left_type),
-                Type::String if op == "+" => Ok(Type::String), // String concatenation
-                _ => Err(format!(
-                    "Operator '{}' cannot be applied to type {}",
-                    op, left_type
-                )),
-            },
+            "+" | "-" | "*" | "/" | "%" | "^" => {
+                self.infer_arithmetic_op_type(op, left_type, right_type)
+            }
             // Comparison operators always return boolean
             "==" | "!=" | "<" | "<=" | ">" | ">=" => Ok(Type::Boolean),
             // Logical operators require boolean operands
             "&&" | "||" => {
-                if *left_type == Type::Boolean {
+                if *left_type == Type::Boolean && *right_type == Type::Boolean {
                     Ok(Type::Boolean)
                 } else {
                     Err(format!(
-                        "Operator '{}' requires boolean operands, got {}",
-                        op, left_type
+                        "Operator '{}' requires boolean operands, got {} and {}",
+                        op, left_type, right_type
                     ))
                 }
             }
-            _ => Err(format!("Unknown operator: {}", op)),
+            _ => Err(format!("Unknown binary operator: {}", op)),
         }
     }
 
-    /// Infer type of unary operation with type validation.
+    /// Infer type of arithmetic operations
+    fn infer_arithmetic_op_type(
+        &self,
+        op: &str,
+        left_type: &Type,
+        right_type: &Type,
+    ) -> Result<Type, String> {
+        // Type compatibility check
+        if !left_type.is_compatible_with(right_type) {
+            return Err(format!(
+                "Type mismatch in '{}': {} and {}",
+                op, left_type, right_type
+            ));
+        }
+
+        match left_type {
+            Type::Integer | Type::Float => Ok(*left_type),
+            Type::String if op == "+" => Ok(Type::String), // String concatenation
+            _ => Err(format!(
+                "Operator '{}' cannot be applied to type {}",
+                op, left_type
+            )),
+        }
+    }
+
+    /// Infer type of unary operation
     fn infer_unary_op_type(&self, op: &str, operand_type: &Type) -> Result<Type, String> {
         match op {
             // Negation requires numeric type
@@ -129,18 +150,5 @@ impl AstBuilder {
             }
             _ => Err(format!("Unknown unary operator: {}", op)),
         }
-    }
-
-    /// Check if an operator is a binary operator.
-    fn is_binary_operator(&self, op: &str) -> bool {
-        matches!(
-            op,
-            "+" | "-" | "*" | "/" | "%" | "^" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "&&" | "||"
-        )
-    }
-
-    /// Check if an operator is a unary operator.
-    fn is_unary_operator(&self, op: &str) -> bool {
-        matches!(op, "-" | "!")
     }
 }

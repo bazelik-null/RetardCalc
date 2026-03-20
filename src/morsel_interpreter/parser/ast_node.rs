@@ -9,17 +9,17 @@ pub enum Node {
     // Literals
     Literal(Value),
     // Variable references
-    Reference(String),
+    Reference(Box<str>),
 
     // Operations (unary, binary, functions)
     Call {
-        name: String,
+        name: Box<str>,
         args: Vec<Node>, // [left, right] for binary, [child] for unary
     },
 
     // Variable binding. Initializes variable
     LetBinding {
-        reference: String,
+        reference: Box<str>,
         value: Box<Node>,
         type_annotation: Type,
     },
@@ -29,7 +29,7 @@ pub enum Node {
 
     // Assignment (x = y)
     Assignment {
-        name: String,
+        name: Box<str>,
         value: Box<Node>,
     },
 

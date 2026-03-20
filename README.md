@@ -75,6 +75,37 @@ see intermediate outputs at each stage.
    ./target/release/Morsel
    ```
 
+## Syntax Highlighting Setup
+
+### VS Code
+
+1. Copy `syntax_highlighting/morsel_vsc/` to your extensions folder:
+    - **Windows:** `%USERPROFILE%\.vscode\extensions\`
+    - **macOS/Linux:** `~/.vscode/extensions/`
+2. Restart VS Code
+
+Files with `.morsel` or `.msl` extensions will now have syntax highlighting.
+
+### JetBrains IDEs (IntelliJ, PyCharm, WebStorm, etc.)
+
+1. Open **Settings** -> **Plugins**
+2. Ensure **TextMate Bundles** plugin is enabled
+3. Go to **Settings** -> **Editor** -> **TextMate Bundles**
+4. Click **Add** and select `syntax_highlighting/Morsel.tmBundle/`
+5. Restart the IDE
+
+### Sublime Text
+
+1. Copy `syntax_highlighting/Morsel.tmBundle/Syntaxes/morsel.tmLanguage.json` to:
+    - **Windows/Linux:** `%APPDATA%\Sublime Text\Packages\User\`
+    - **macOS:** `~/Library/Application Support/Sublime Text/Packages/User/`
+2. Restart Sublime Text
+3. Select **View** -> **Syntax** -> **Morsel** to apply highlighting
+
+---
+
+**Note:** The TextMate grammar (`morsel.tmLanguage.json`) is shared across all editors for consistency.
+
 ## Language Reference
 
 ### Basic Operations

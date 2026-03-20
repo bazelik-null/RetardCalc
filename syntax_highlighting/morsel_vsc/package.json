@@ -1,0 +1,35 @@
+{
+  "name": "morsel",
+  "displayName": "Morsel",
+  "description": "Morsel language syntax highlighting",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.110.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "morsel",
+        "aliases": [
+          "Morsel",
+          "morsel"
+        ],
+        "extensions": [
+          ".msl",
+          ".morsel"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "morsel",
+        "scopeName": "source.msl",
+        "path": "./syntaxes/morsel.tmLanguage.json"
+      }
+    ]
+  }
+}

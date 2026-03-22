@@ -1,0 +1,384 @@
+use crate::core::compiler::error_handler::CompilerError;
+use crate::core::compiler::preprocessor::token::OperatorValue::Divide;
+use crate::core::compiler::preprocessor::token::{
+    LexerOutput, LiteralValue, Number, OperatorValue, SyntaxValue, Token, TokenType,
+};
+use lasso::Spur;
+
+pub struct Lexer {
+    filename: String,
+    source: Vec<char>, // Input string
+    pos: usize,        // Current position
+    line: u16,         // Current line
+    line_start: usize, // Position where current line starts
+    output: LexerOutput,
+}
+
+impl Lexer {
+    pub fn new(input: String, filename: &str) -> Lexer {
+        let source: Vec<char> = input.trim().chars().collect();
+        Lexer {
+            filename: filename.to_string(),
+            source,
+            pos: 0,
+            line: 0,
+            line_start: 0,
+            output: LexerOutput::new(),
+        }
+    }
+
+    /// Scans file and returns output
+    pub fn scan(mut self) -> LexerOutput {
+        if self.source.is_empty() {
+            self.error("Empty source file");
+            return self.output;
+        }
+
+        while !self.is_eof() {
+            let ch = self.peek();
+
+            self.scan_token(ch)
+        }
+
+        self.push_token(TokenType::Eof);
+
+        self.output
+    }
+
+    /// Scans character and pushes token
+    fn scan_token(&mut self, ch: char) {
+        match ch {
+            ' ' | '\t' | '\r' => {
+                self.advance();
+            }
+            '\n' => {
+                self.advance();
+                self.advance_line();
+            }
+            '/' => {
+                if self.peek_ahead() == '/' {
+                    self.skip_line()
+                } else {
+                    self.advance();
+                    self.push_token(TokenType::Operator(Divide));
+                }
+            }
+            '"' => {
+                let string = self.parse_string();
+                let string_key = self.push_string(&string);
+                self.push_token(TokenType::Literal(LiteralValue::String(string_key)));
+            }
+            '0'..='9' => {
+                let number = self.parse_number();
+                match number {
+                    Number::Integer(value) => {
+                        self.push_token(TokenType::Literal(LiteralValue::Integer(value)))
+                    }
+                    Number::Float(value) => {
+                        self.push_token(TokenType::Literal(LiteralValue::Float(value)))
+                    }
+                }
+            }
+            'a'..='z' | 'A'..='Z' | '_' => {
+                let name = self.parse_identifier();
+                let name_key = self.push_string(&name);
+                self.push_token(TokenType::Identifier(name_key));
+            }
+            '>' | '<' | '!' | '=' => {
+                let token = self.parse_logic_operator();
+                self.push_token(token);
+            }
+            '+' | '-' | '*' | '%' | '^' => {
+                let op = self.parse_operator();
+                self.push_token(TokenType::Operator(op));
+            }
+            '(' | ')' | '{' | '}' | ',' | ';' | ':' => {
+                let syntax = self.parse_syntax();
+                self.push_token(TokenType::Syntax(syntax));
+            }
+            _ => {
+                self.advance();
+                self.error("Unexpected character");
+            }
+        }
+    }
+
+    /// Parses a string literal
+    fn parse_string(&mut self) -> String {
+        let mut result = String::new();
+        self.advance(); // Consume opening quote
+
+        while !self.is_eof() && self.peek() != '"' {
+            if self.peek() == '\\' {
+                self.advance();
+
+                if self.is_eof() {
+                    self.error("Unterminated string literal");
+                    break;
+                }
+
+                // Handle escape sequences
+                match self.peek() {
+                    'n' => result.push('\n'),
+                    't' => result.push('\t'),
+                    'r' => result.push('\r'),
+                    '\\' => result.push('\\'),
+                    '"' => result.push('"'),
+                    '0' => result.push('\0'),
+                    _ => {
+                        self.error("Unknown escape sequence");
+                        result.push(self.peek());
+                    }
+                }
+
+                self.advance();
+            } else {
+                result.push(self.peek());
+                self.advance();
+            }
+        }
+
+        if self.is_eof() {
+            self.error("Unterminated string literal");
+        } else {
+            self.advance(); // Consume closing quote
+        }
+
+        result
+    }
+
+    /// Parses a numeric literal (integer or float)
+    fn parse_number(&mut self) -> Number {
+        let mut number_str = String::new();
+        let mut is_float = false;
+        let mut has_error = false;
+
+        // Consume all digits and at most one decimal point
+        while !self.is_eof() && (self.peek().is_ascii_digit() || self.peek() == '.') {
+            if self.peek() == '.' {
+                if is_float {
+                    self.error("Multiple decimal points in number");
+                    has_error = true;
+                } else {
+                    is_float = true;
+                }
+            }
+            number_str.push(self.peek());
+            self.advance();
+        }
+
+        // Handle scientific notation (like 1e10, 1.5e-3)
+        if !self.is_eof() && (self.peek() == 'e' || self.peek() == 'E') {
+            is_float = true;
+            number_str.push(self.peek());
+            self.advance();
+
+            // Optional sign after 'e'
+            if !self.is_eof() && (self.peek() == '+' || self.peek() == '-') {
+                number_str.push(self.peek());
+                self.advance();
+            }
+
+            // Consume exponent digits
+            while !self.is_eof() && self.peek().is_ascii_digit() {
+                number_str.push(self.peek());
+                self.advance();
+            }
+        }
+
+        // Parse the string into a number
+        if is_float {
+            match number_str.parse::<f32>() {
+                Ok(value) => Number::Float(value),
+                Err(_) => {
+                    if !has_error {
+                        self.error("Invalid float literal");
+                    }
+                    Number::Float(0.0)
+                }
+            }
+        } else {
+            match number_str.parse::<i32>() {
+                Ok(value) => Number::Integer(value),
+                Err(_) => {
+                    if !has_error {
+                        self.error("Invalid integer literal");
+                    }
+                    Number::Integer(0)
+                }
+            }
+        }
+    }
+
+    /// TODO: Keywords
+    /// Parses an identifier or keyword
+    fn parse_identifier(&mut self) -> String {
+        let mut identifier = String::new();
+
+        // First character is already validated (letter or underscore)
+        while !self.is_eof() && (self.peek().is_alphanumeric() || self.peek() == '_') {
+            identifier.push(self.peek());
+            self.advance();
+        }
+
+        identifier
+    }
+
+    /// Parses an operator token
+    fn parse_operator(&mut self) -> OperatorValue {
+        let op = match self.peek() {
+            '+' => OperatorValue::Plus,
+            '-' => OperatorValue::Minus,
+            '*' => OperatorValue::Multiply,
+            '%' => OperatorValue::Modulo,
+            '^' => OperatorValue::Power,
+            _ => unreachable!("Invalid operator in parse_operator"),
+        };
+
+        self.advance();
+        op
+    }
+
+    /// Parses a logic operator token
+    fn parse_logic_operator(&mut self) -> TokenType {
+        let ch = self.peek();
+
+        match (ch, self.peek_ahead()) {
+            ('=', '=') => {
+                self.advance();
+                self.advance();
+                TokenType::Operator(OperatorValue::Equal)
+            }
+            ('!', '=') => {
+                self.advance();
+                self.advance();
+                TokenType::Operator(OperatorValue::NotEqual)
+            }
+            ('<', '=') => {
+                self.advance();
+                self.advance();
+                TokenType::Operator(OperatorValue::LessThanOrEqual)
+            }
+            ('>', '=') => {
+                self.advance();
+                self.advance();
+                TokenType::Operator(OperatorValue::GreaterThanOrEqual)
+            }
+            ('=', _) => {
+                self.advance();
+                TokenType::Syntax(SyntaxValue::Assign)
+            }
+            ('<', _) => {
+                self.advance();
+                TokenType::Operator(OperatorValue::LessThan)
+            }
+            ('>', _) => {
+                self.advance();
+                TokenType::Operator(OperatorValue::GreaterThan)
+            }
+            ('!', _) => {
+                self.advance();
+                TokenType::Operator(OperatorValue::Not)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    /// Parses a syntax token (punctuation and delimiters)
+    fn parse_syntax(&mut self) -> SyntaxValue {
+        let syntax = match self.peek() {
+            '(' => SyntaxValue::LParen,
+            ')' => SyntaxValue::RParen,
+            '{' => SyntaxValue::LBrace,
+            '}' => SyntaxValue::RBrace,
+            ',' => SyntaxValue::Comma,
+            '=' => SyntaxValue::Assign,
+            ';' => SyntaxValue::Semicolon,
+            ':' => SyntaxValue::Colon,
+            _ => unreachable!("Invalid operator in parse_operator"),
+        };
+
+        self.advance();
+        syntax
+    }
+
+    /// Skips everything until newline
+    fn skip_line(&mut self) {
+        while !self.is_eof() && self.peek() != '\n' {
+            self.advance();
+        }
+
+        if !self.is_eof() {
+            self.advance(); // Consume newline
+            self.advance_line();
+        }
+    }
+
+    /// Increments line counter
+    fn advance_line(&mut self) {
+        self.line += 1;
+        self.line_start = self.pos;
+    }
+
+    /// Consumes current token
+    fn advance(&mut self) {
+        self.pos += 1;
+    }
+
+    /// Peeks character without consuming it
+    fn peek(&self) -> char {
+        self.source.get(self.pos).copied().unwrap_or('\0')
+    }
+
+    /// Peeks next character without consuming it
+    fn peek_ahead(&self) -> char {
+        self.source.get(self.pos + 1).copied().unwrap_or('\0')
+    }
+
+    /// Returns true if reached end of file
+    fn is_eof(&self) -> bool {
+        self.pos >= self.source.len()
+    }
+
+    /// Returns character position in the current line
+    fn get_column(&self) -> u16 {
+        (self.pos - self.line_start) as u16
+    }
+
+    /// Returns current line as str
+    fn get_line(&self) -> String {
+        let start = self.line_start;
+        let end = self.source[start..]
+            .iter()
+            .position(|&c| c == '\n')
+            .map(|p| start + p)
+            .unwrap_or(self.source.len());
+
+        self.source[start..end].iter().collect()
+    }
+
+    /// Adds token to the output
+    fn push_token(&mut self, token_type: TokenType) {
+        self.output
+            .push(Token::new(token_type, self.line, self.get_column()))
+    }
+
+    /// Pushes string to rodeo and returns key
+    fn push_string(&mut self, value: &str) -> Spur {
+        self.output.rodeo.get_or_intern(value)
+    }
+
+    /// Add error to the error list
+    fn error(&mut self, message: &str) {
+        let error = CompilerError::new(
+            message.to_string(),
+            "Lexer".to_string(),
+            self.line,
+            self.get_column(),
+            Some(self.get_line()),
+            Some(self.filename.clone()),
+        );
+
+        self.output.errors.push(error);
+    }
+}

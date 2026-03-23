@@ -1,7 +1,6 @@
 use crate::core::compiler::error_handler::CompilerError;
-use crate::core::compiler::preprocessor::token::OperatorValue::Divide;
 use crate::core::compiler::preprocessor::token::{
-    LexerOutput, LiteralValue, Number, OperatorValue, SyntaxValue, Token, TokenType,
+    KeywordValue, LexerOutput, LiteralValue, Number, OperatorValue, SyntaxValue, Token, TokenType,
 };
 use lasso::Spur;
 
@@ -60,7 +59,7 @@ impl Lexer {
                     self.skip_line()
                 } else {
                     self.advance();
-                    self.push_token(TokenType::Operator(Divide));
+                    self.push_token(TokenType::Operator(OperatorValue::Divide));
                 }
             }
             '"' => {
@@ -80,11 +79,20 @@ impl Lexer {
                 }
             }
             'a'..='z' | 'A'..='Z' | '_' => {
+                // Parse as identifier first, then chek if it's a keyword
                 let name = self.parse_identifier();
-                let name_key = self.push_string(&name);
-                self.push_token(TokenType::Identifier(name_key));
+                let keyword = self.parse_keyword(name.as_str());
+                match keyword {
+                    None => {
+                        let name_key = self.push_string(&name);
+                        self.push_token(TokenType::Identifier(name_key));
+                    }
+                    Some(keyword) => {
+                        self.push_token(TokenType::Keyword(keyword));
+                    }
+                }
             }
-            '>' | '<' | '!' | '=' => {
+            '>' | '<' | '!' | '=' | '&' | '|' => {
                 let token = self.parse_logic_operator();
                 self.push_token(token);
             }
@@ -210,8 +218,7 @@ impl Lexer {
         }
     }
 
-    /// TODO: Keywords
-    /// Parses an identifier or keyword
+    /// Parses an identifier
     fn parse_identifier(&mut self) -> String {
         let mut identifier = String::new();
 
@@ -222,6 +229,20 @@ impl Lexer {
         }
 
         identifier
+    }
+
+    /// Parses keywords
+    fn parse_keyword(&mut self, string: &str) -> Option<KeywordValue> {
+        match string {
+            "let" => Some(KeywordValue::VariableDecl),
+            "mut" => Some(KeywordValue::Mutable),
+            "func" => Some(KeywordValue::FunctionDecl),
+            "if" => Some(KeywordValue::If),
+            "else" => Some(KeywordValue::Else),
+            "for" => Some(KeywordValue::For),
+            "while" => Some(KeywordValue::While),
+            _ => None,
+        }
     }
 
     /// Parses an operator token
@@ -280,7 +301,18 @@ impl Lexer {
                 self.advance();
                 TokenType::Operator(OperatorValue::Not)
             }
-            _ => unreachable!(),
+            ('&', '&') => {
+                self.advance();
+                TokenType::Operator(OperatorValue::And)
+            }
+            ('|', '|') => {
+                self.advance();
+                TokenType::Operator(OperatorValue::Or)
+            }
+            _ => {
+                self.error("Unexpected token");
+                TokenType::Operator(OperatorValue::Not) // Default to not
+            }
         }
     }
 

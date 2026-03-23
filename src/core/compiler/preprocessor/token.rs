@@ -74,6 +74,8 @@ pub enum OperatorValue {
     LessThan,           // <
     GreaterThanOrEqual, // >=
     LessThanOrEqual,    // <=
+    And,                // &&
+    Or,                 // ||
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -92,6 +94,7 @@ pub enum SyntaxValue {
 pub enum KeywordValue {
     FunctionDecl, // func
     VariableDecl, // let
+    Mutable,      // mut
     If,           // if
     Else,         // else
     While,        // while

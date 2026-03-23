@@ -2,7 +2,7 @@
 // To execute use ./Morsel examples/circle.msl
 // Or ./Morsel and "file examples/circle.msl"
 
-fn prompt(text: string): float {
+func prompt(text: string): float {
     std::io::println(text);
 
     // Get user input
@@ -12,7 +12,7 @@ fn prompt(text: string): float {
     std::to_float(input)
 }
 
-fn calculate_circle_properties(radius: float) {
+func calculate_circle_properties(radius: float) {
     let area: float = pi * radius ^ 2.0;
     let circumference: float = 2.0 * pi * radius;
     let diameter: float = 2.0 * radius;
@@ -31,7 +31,7 @@ fn calculate_circle_properties(radius: float) {
     std::io::println("---");
 }
 
-fn main() {
+func main() {
     // Create a prompt
     let circle = prompt("Enter circle radius");
 

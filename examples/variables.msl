@@ -2,7 +2,7 @@
 // To execute use ./Morsel examples/variables.msl
 // Or ./Morsel and "file examples/variables.msl"
 
-fn main() {
+func main() {
     std::io::println("\n== What is a Variable? ==")
     std::io::println("A variable is a named storage location that holds a value or data.\n")
 

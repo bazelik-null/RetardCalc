@@ -77,7 +77,7 @@
       "patterns": [
         {
           "name": "keyword.control.morsel",
-          "match": "\\b(fn|let|mut|if|else|while|for|return)\\b"
+          "match": "\\b(func|let|mut|if|else|while|for|return)\\b"
         }
       ]
     },

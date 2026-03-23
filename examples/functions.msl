@@ -3,27 +3,27 @@
 // Or ./Morsel and "file examples/functions.msl"
 
 // You can provide explicit type annotation
-fn add(x: int, y: int): int {
+func add(x: int, y: int): int {
     x + y
 }
 
-fn greet(name: string) {
+func greet(name: string) {
     std::io::println("Hello,", name, "!");
 }
 
-fn max_of_three(a: int, b: int, c: int) {
+func max_of_three(a: int, b: int, c: int) {
     std::math::max(a, b, c)
 }
 
-fn rectangle_area(length: int, width: int) {
+func rectangle_area(length: int, width: int) {
     length * width
 }
 
-fn celsius_to_fahrenheit(celsius: float) {
+func celsius_to_fahrenheit(celsius: float) {
     (celsius * 9.0 / 5.0) + 32.0
 }
 
-fn main() {
+func main() {
     std::io::println("== What is a Function? ==");
     std::io::println("A function holds a piece of code that does a specific task.");
     std::io::println("A function takes some data as input, the code inside the function does something with the data, and then the result is returned.\n");

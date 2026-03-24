@@ -1,5 +1,3 @@
-Here's your improved README with the changes applied:
-
 <div align="center">
 <h1> Morsel </h1>
 <img src="doc/img/logo.png" width="500">
@@ -11,16 +9,20 @@ Here's your improved README with the changes applied:
 
 # Introduction
 
-**Morsel** is an **interpreted** programming language built in **Rust** as my first Rust project. It combines the
-performance and memory safety of Rust with an easy, expression-based syntax inspired by C, Go, and Rust itself.
+**Morsel** is an **interpreted** programming language built in **Rust** as my first Rust project. It combines memory and
+type safety of Rust with an easy, expression-based syntax inspired by C, Go, and Rust itself.
+
+# Syntax
+
+See [SYNTAX.md](doc/SYNTAX.md) for detailed syntax documentation.
 
 # Roadmap
 
-- [ ] Syntax specification
-- [ ] Error handling
+- [x] Syntax specification
+- [x] Error handling
 -
-- [ ] Lexer
-- [ ] Parser
+- [x] Lexer
+- [x] Parser
 - [ ] Tree-walker (for debug)
 -
 - [ ] Bytecode specification

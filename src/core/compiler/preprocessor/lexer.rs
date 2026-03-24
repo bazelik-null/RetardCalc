@@ -2,34 +2,34 @@ use crate::core::compiler::error_handler::CompilerError;
 use crate::core::compiler::preprocessor::token::{
     KeywordValue, LexerOutput, LiteralValue, Number, OperatorValue, SyntaxValue, Token, TokenType,
 };
-use lasso::Spur;
+use crate::core::compiler::source::SourceCode;
+use lasso::{Rodeo, Spur};
 
-pub struct Lexer {
-    filename: String,
-    source: Vec<char>, // Input string
+pub struct Lexer<'a> {
+    source_code: &'a SourceCode,
     pos: usize,        // Current position
-    line: u16,         // Current line
+    line: usize,       // Current line
     line_start: usize, // Position where current line starts
+    rodeo: &'a mut Rodeo,
     output: LexerOutput,
 }
 
-impl Lexer {
-    pub fn new(input: String, filename: &str) -> Lexer {
-        let source: Vec<char> = input.trim().chars().collect();
-        Lexer {
-            filename: filename.to_string(),
-            source,
+impl<'a> Lexer<'a> {
+    pub fn new(rodeo: &'a mut Rodeo, source_code: &'a SourceCode) -> Self {
+        Self {
+            source_code,
             pos: 0,
             line: 0,
             line_start: 0,
+            rodeo,
             output: LexerOutput::new(),
         }
     }
 
     /// Scans file and returns output
     pub fn scan(mut self) -> LexerOutput {
-        if self.source.is_empty() {
-            self.error("Empty source file");
+        if self.source_code.source.is_empty() {
+            self.error("Empty source file", 1);
             return self.output;
         }
 
@@ -39,7 +39,7 @@ impl Lexer {
             self.scan_token(ch)
         }
 
-        self.push_token(TokenType::Eof);
+        self.push_token(TokenType::Eof, 1);
 
         self.output
     }
@@ -59,22 +59,22 @@ impl Lexer {
                     self.skip_line()
                 } else {
                     self.advance();
-                    self.push_token(TokenType::Operator(OperatorValue::Divide));
+                    self.push_token(TokenType::Operator(OperatorValue::Divide), 1);
                 }
             }
             '"' => {
                 let string = self.parse_string();
                 let string_key = self.push_string(&string);
-                self.push_token(TokenType::Literal(LiteralValue::String(string_key)));
+                self.push_token(TokenType::Literal(LiteralValue::String(string_key)), 1);
             }
             '0'..='9' => {
                 let number = self.parse_number();
                 match number {
                     Number::Integer(value) => {
-                        self.push_token(TokenType::Literal(LiteralValue::Integer(value)))
+                        self.push_token(TokenType::Literal(LiteralValue::Integer(value)), 1)
                     }
                     Number::Float(value) => {
-                        self.push_token(TokenType::Literal(LiteralValue::Float(value)))
+                        self.push_token(TokenType::Literal(LiteralValue::Float(value)), 1)
                     }
                 }
             }
@@ -85,28 +85,28 @@ impl Lexer {
                 match keyword {
                     None => {
                         let name_key = self.push_string(&name);
-                        self.push_token(TokenType::Identifier(name_key));
+                        self.push_token(TokenType::Identifier(name_key), name.len() as u16);
                     }
                     Some(keyword) => {
-                        self.push_token(TokenType::Keyword(keyword));
+                        self.push_token(TokenType::Keyword(keyword), name.len() as u16);
                     }
                 }
             }
             '>' | '<' | '!' | '=' | '&' | '|' => {
                 let token = self.parse_logic_operator();
-                self.push_token(token);
+                self.push_token(token, 1);
             }
             '+' | '-' | '*' | '%' | '^' => {
                 let op = self.parse_operator();
-                self.push_token(TokenType::Operator(op));
+                self.push_token(TokenType::Operator(op), 1);
             }
-            '(' | ')' | '{' | '}' | ',' | ';' | ':' => {
+            '(' | ')' | '{' | '}' | '[' | ']' | ',' | ';' | ':' => {
                 let syntax = self.parse_syntax();
-                self.push_token(TokenType::Syntax(syntax));
+                self.push_token(TokenType::Syntax(syntax), 1);
             }
             _ => {
                 self.advance();
-                self.error("Unexpected character");
+                self.error("Unexpected character", 1);
             }
         }
     }
@@ -121,7 +121,7 @@ impl Lexer {
                 self.advance();
 
                 if self.is_eof() {
-                    self.error("Unterminated string literal");
+                    self.error("Unterminated string literal", 1);
                     break;
                 }
 
@@ -134,7 +134,7 @@ impl Lexer {
                     '"' => result.push('"'),
                     '0' => result.push('\0'),
                     _ => {
-                        self.error("Unknown escape sequence");
+                        self.error("Unknown escape sequence", 1);
                         result.push(self.peek());
                     }
                 }
@@ -147,7 +147,7 @@ impl Lexer {
         }
 
         if self.is_eof() {
-            self.error("Unterminated string literal");
+            self.error("Unterminated string literal", 1);
         } else {
             self.advance(); // Consume closing quote
         }
@@ -165,7 +165,7 @@ impl Lexer {
         while !self.is_eof() && (self.peek().is_ascii_digit() || self.peek() == '.') {
             if self.peek() == '.' {
                 if is_float {
-                    self.error("Multiple decimal points in number");
+                    self.error("Multiple decimal points in number", number_str.len() as u16);
                     has_error = true;
                 } else {
                     is_float = true;
@@ -200,7 +200,7 @@ impl Lexer {
                 Ok(value) => Number::Float(value),
                 Err(_) => {
                     if !has_error {
-                        self.error("Invalid float literal");
+                        self.error("Invalid float literal", number_str.len() as u16);
                     }
                     Number::Float(0.0)
                 }
@@ -210,7 +210,7 @@ impl Lexer {
                 Ok(value) => Number::Integer(value),
                 Err(_) => {
                     if !has_error {
-                        self.error("Invalid integer literal");
+                        self.error("Invalid integer literal", number_str.len() as u16);
                     }
                     Number::Integer(0)
                 }
@@ -241,6 +241,11 @@ impl Lexer {
             "else" => Some(KeywordValue::Else),
             "for" => Some(KeywordValue::For),
             "while" => Some(KeywordValue::While),
+            "int" => Some(KeywordValue::Integer),
+            "float" => Some(KeywordValue::Float),
+            "bool" => Some(KeywordValue::Boolean),
+            "string" => Some(KeywordValue::String),
+            "return" => Some(KeywordValue::Return),
             _ => None,
         }
     }
@@ -303,14 +308,16 @@ impl Lexer {
             }
             ('&', '&') => {
                 self.advance();
+                self.advance();
                 TokenType::Operator(OperatorValue::And)
             }
             ('|', '|') => {
                 self.advance();
+                self.advance();
                 TokenType::Operator(OperatorValue::Or)
             }
             _ => {
-                self.error("Unexpected token");
+                self.error("Unexpected token", 1);
                 TokenType::Operator(OperatorValue::Not) // Default to not
             }
         }
@@ -323,11 +330,13 @@ impl Lexer {
             ')' => SyntaxValue::RParen,
             '{' => SyntaxValue::LBrace,
             '}' => SyntaxValue::RBrace,
+            '[' => SyntaxValue::LBracket,
+            ']' => SyntaxValue::RBracket,
             ',' => SyntaxValue::Comma,
             '=' => SyntaxValue::Assign,
             ';' => SyntaxValue::Semicolon,
             ':' => SyntaxValue::Colon,
-            _ => unreachable!("Invalid operator in parse_operator"),
+            _ => unreachable!("Invalid syntax in parse_syntax"),
         };
 
         self.advance();
@@ -349,7 +358,7 @@ impl Lexer {
     /// Increments line counter
     fn advance_line(&mut self) {
         self.line += 1;
-        self.line_start = self.pos;
+        self.line_start = self.pos - 1;
     }
 
     /// Consumes current token
@@ -359,56 +368,52 @@ impl Lexer {
 
     /// Peeks character without consuming it
     fn peek(&self) -> char {
-        self.source.get(self.pos).copied().unwrap_or('\0')
+        self.source_code
+            .source
+            .get(self.pos)
+            .copied()
+            .unwrap_or('\0')
     }
 
     /// Peeks next character without consuming it
     fn peek_ahead(&self) -> char {
-        self.source.get(self.pos + 1).copied().unwrap_or('\0')
+        self.source_code
+            .source
+            .get(self.pos + 1)
+            .copied()
+            .unwrap_or('\0')
     }
 
     /// Returns true if reached end of file
     fn is_eof(&self) -> bool {
-        self.pos >= self.source.len()
-    }
-
-    /// Returns character position in the current line
-    fn get_column(&self) -> u16 {
-        (self.pos - self.line_start) as u16
-    }
-
-    /// Returns current line as str
-    fn get_line(&self) -> String {
-        let start = self.line_start;
-        let end = self.source[start..]
-            .iter()
-            .position(|&c| c == '\n')
-            .map(|p| start + p)
-            .unwrap_or(self.source.len());
-
-        self.source[start..end].iter().collect()
+        self.pos >= self.source_code.source.len()
     }
 
     /// Adds token to the output
-    fn push_token(&mut self, token_type: TokenType) {
-        self.output
-            .push(Token::new(token_type, self.line, self.get_column()))
+    fn push_token(&mut self, token_type: TokenType, length: u16) {
+        self.output.push(Token::new(
+            token_type,
+            self.line,
+            SourceCode::get_column(self.pos, self.line_start),
+            length,
+        ))
     }
 
     /// Pushes string to rodeo and returns key
     fn push_string(&mut self, value: &str) -> Spur {
-        self.output.rodeo.get_or_intern(value)
+        self.rodeo.get_or_intern(value)
     }
 
     /// Add error to the error list
-    fn error(&mut self, message: &str) {
+    fn error(&mut self, message: &str, length: u16) {
         let error = CompilerError::new(
             message.to_string(),
             "Lexer".to_string(),
             self.line,
-            self.get_column(),
-            Some(self.get_line()),
-            Some(self.filename.clone()),
+            SourceCode::get_column(self.pos, self.line_start),
+            length,
+            self.source_code.get_line(self.line),
+            Some(self.source_code.filename.clone()),
         );
 
         self.output.errors.push(error);

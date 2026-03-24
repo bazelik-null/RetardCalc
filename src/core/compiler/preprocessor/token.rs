@@ -1,8 +1,9 @@
 use crate::core::compiler::error_handler::CompilerError;
-use lasso::{Rodeo, Spur};
+use lasso::Spur;
+use std::fmt;
+use std::fmt::Formatter;
 
 pub struct LexerOutput {
-    pub rodeo: Rodeo,
     pub tokens: Vec<Token>,
     pub errors: Vec<CompilerError>,
 }
@@ -17,7 +18,6 @@ impl LexerOutput {
     pub fn new() -> Self {
         Self {
             tokens: Vec::new(),
-            rodeo: Rodeo::new(),
             errors: Vec::new(),
         }
     }
@@ -27,11 +27,12 @@ impl LexerOutput {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Token {
     pub token_type: TokenType,
-    pub line: u16,
+    pub line: usize,
     pub column: u16,
+    pub length: u16,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -57,7 +58,7 @@ pub enum Number {
     Float(f32),
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum OperatorValue {
     // Math operators
     Plus,     // +
@@ -78,7 +79,7 @@ pub enum OperatorValue {
     Or,                 // ||
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum SyntaxValue {
     Semicolon, // ;
     Colon,     // :
@@ -88,25 +89,61 @@ pub enum SyntaxValue {
     RParen,    // )
     LBrace,    // {
     RBrace,    // }
+    LBracket,  // [
+    RBracket,  // ]
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum KeywordValue {
+    // Declarations
     FunctionDecl, // func
     VariableDecl, // let
     Mutable,      // mut
-    If,           // if
-    Else,         // else
-    While,        // while
-    For,          // for
+    // Control flow
+    If,     // if
+    Else,   // else
+    Return, // return
+    // Loops
+    While, // while
+    For,   // for
+    // Types
+    Integer,
+    Float,
+    Boolean,
+    String,
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, line: u16, column: u16) -> Self {
+    pub fn new(token_type: TokenType, line: usize, column: u16, length: u16) -> Self {
         Self {
             token_type,
             line,
             column,
+            length,
         }
+    }
+}
+
+impl fmt::Display for OperatorValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let op = match self {
+            OperatorValue::Plus => "+",
+            OperatorValue::Minus => "-",
+            OperatorValue::Multiply => "*",
+            OperatorValue::Divide => "/",
+            OperatorValue::Modulo => "%",
+            OperatorValue::Power => "^",
+            OperatorValue::Equal => "==",
+            OperatorValue::NotEqual => "!=",
+            OperatorValue::Not => "!",
+            OperatorValue::GreaterThan => ">",
+            OperatorValue::LessThan => "<",
+            OperatorValue::GreaterThanOrEqual => ">=",
+            OperatorValue::LessThanOrEqual => "<=",
+            OperatorValue::And => "&&",
+            OperatorValue::Or => "||",
+        };
+
+        write!(f, "{}", op)
     }
 }

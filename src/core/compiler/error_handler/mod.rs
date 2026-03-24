@@ -1,12 +1,14 @@
+use colored::Colorize;
 use core::fmt;
 use std::fmt::Formatter;
 
 #[derive(Debug, Default, Clone)]
 pub struct CompilerError {
-    message: String,             // Error message
-    from: String,                // From which part of the compiler
-    line: u16,                   // Line with error
-    column: u16,                 // Character offset from line start
+    message: String, // Error message
+    from: String,    // From which part of the compiler
+    line: usize,     // Line with error
+    column: u16,     // Character offset from line start
+    length: u16,
     source_line: Option<String>, // Line contents
     filename: Option<String>,
 }
@@ -15,8 +17,9 @@ impl CompilerError {
     pub fn new(
         message: String,
         from: String,
-        line: u16,
+        line: usize,
         column: u16,
+        length: u16,
         source_line: Option<String>,
         filename: Option<String>,
     ) -> CompilerError {
@@ -25,6 +28,7 @@ impl CompilerError {
             from,
             line,
             column,
+            length,
             source_line,
             filename,
         }
@@ -55,10 +59,14 @@ impl CompilerError {
         ));
 
         // Pointer to error
-        let char_pos = self.column;
-        output.push_str(&format!("   |{}^ here\n", " ".repeat(char_pos as usize)));
+        output.push_str(&format!(
+            "   |{}{} here\n",
+            " ".repeat(self.column as usize),
+            "^".repeat(self.length as usize)
+        ));
 
-        output
+        // Apply color to entire output
+        output.red().to_string()
     }
 }
 

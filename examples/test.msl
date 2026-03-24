@@ -1,14 +1,16 @@
 // Test file
 
+func divide(x: int, y: int): float {
+    if (x == 0 || y == 0) {
+        return 0;
+    }
+
+    x / y
+}
+
 func main() {
     let x = 1;
-    let mut y = 2;
+    let mut y: float = 2;
 
-    y = y + x;
-
-    if (y > 3) {
-        y = 0;
-    } else {
-        y = y + 1;
-    }
+    y = divide(x, y);
 }

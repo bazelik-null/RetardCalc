@@ -24,7 +24,10 @@ See [SYNTAX.md](doc/SYNTAX.md) for detailed syntax documentation.
 - [x] Lexer
 -
 - [x] Parser
+-
 - [x] Semantic analyzer
+- [x] Type safety
+- [ ] Type casting
 -
 - [ ] Bytecode specification
 - [ ] Compiler
@@ -36,8 +39,6 @@ See [SYNTAX.md](doc/SYNTAX.md) for detailed syntax documentation.
 -
 - [ ] Variables
 - [ ] Memory management (stack, heap, etc)
-- [ ] Type safety
-- [ ] Type casting
 -
 - [ ] Full virtual machine
 -

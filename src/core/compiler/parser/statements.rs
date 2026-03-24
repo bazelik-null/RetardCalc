@@ -1,5 +1,5 @@
+use crate::core::compiler::parser::tree::{Node, Parameter, Type};
 use crate::core::compiler::parser::Parser;
-use crate::core::compiler::parser::tree::{Node, Type};
 use crate::core::compiler::preprocessor::token::{KeywordValue, SyntaxValue, TokenType};
 
 impl<'a> Parser<'a> {
@@ -110,7 +110,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_params(&mut self) -> Result<Vec<Node>, ()> {
+    fn parse_params(&mut self) -> Result<Vec<Parameter>, ()> {
         let mut params = Vec::new();
 
         while !self.check_syntax(SyntaxValue::RParen) {
@@ -118,7 +118,7 @@ impl<'a> Parser<'a> {
             self.expect_syntax(SyntaxValue::Colon)?;
             let param_type = self.parse_type()?;
 
-            params.push(Node::ParamDecl {
+            params.push(Parameter {
                 name: param_name,
                 type_annotation: param_type,
             });

@@ -46,6 +46,12 @@ impl fmt::Display for Type {
 }
 
 #[derive(Debug, Clone)]
+pub struct Parameter {
+    pub name: Spur,
+    pub type_annotation: Type,
+}
+
+#[derive(Debug, Clone)]
 pub enum Node {
     // Expressions
     Literal(LiteralValue),
@@ -81,13 +87,9 @@ pub enum Node {
         type_annotation: Option<Type>,
         value: Box<Node>,
     },
-    ParamDecl {
-        name: Spur,
-        type_annotation: Type,
-    },
     FunctionDecl {
         name: Spur,
-        params: Vec<Node>, // ParamDecl nodes
+        params: Vec<Parameter>,
         body: Box<Node>,
         return_type: Option<Type>,
     },
@@ -201,16 +203,6 @@ impl Node {
                 ));
             }
 
-            Node::ParamDecl {
-                name: _name,
-                type_annotation,
-            } => {
-                result.push_str(&format!(
-                    "{}{}type: {}\n",
-                    prefix, extension, type_annotation
-                ));
-            }
-
             Node::FunctionDecl {
                 name: _name,
                 params,
@@ -219,13 +211,14 @@ impl Node {
             } => {
                 if !params.is_empty() {
                     result.push_str(&format!("{}{}params:\n", prefix, extension));
-                    for (i, param) in params.iter().enumerate() {
-                        let is_last_param = i == params.len() - 1;
-                        result.push_str(&param.print_tree(
-                            rodeo,
+                    for param in params.iter().enumerate() {
+                        let param_str = format!(
+                            "{}{}: {}\n",
                             &format!("{}{}  ", prefix, extension),
-                            is_last_param,
-                        ));
+                            rodeo.resolve(&param.1.name),
+                            param.1.type_annotation,
+                        );
+                        result.push_str(&param_str);
                     }
                 }
                 if let Some(ret_ty) = return_type {
@@ -275,9 +268,6 @@ impl Node {
             Node::While { .. } => "While".to_string(),
             Node::VariableDecl { name, .. } => {
                 format!("VariableDecl: {}", rodeo.resolve(name))
-            }
-            Node::ParamDecl { name, .. } => {
-                format!("ParamDecl: {}", rodeo.resolve(name))
             }
             Node::FunctionDecl { name, .. } => {
                 format!("FunctionDecl: {}", rodeo.resolve(name))

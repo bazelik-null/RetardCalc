@@ -5,6 +5,18 @@
 This document describes the bytecode instruction set, stack model, and function calling mechanism for the Morsel
 stack-based virtual machine.
 
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Stack Model](#stack-model)
+3. [Functions and Calling Convention](#functions-and-calling-convention)
+4. [Instruction Set](#instruction-set)
+5. [Local Variables](#local-variables)
+6. [Data Sections and Globals](#data-sections-and-globals)
+7. [Labels and Jumps](#labels-and-jumps)
+8. [Instruction Encoding](#instruction-encoding)
+9. [Executable Format](#executable-format)
+
 ## Stack Model
 
 ### Stack Semantics
@@ -19,6 +31,14 @@ The **stack** is a Last-In-First-Out (LIFO) data structure where all computation
 
 The stack grows upward, with the **top** being the most recently pushed value.
 
+```
+Top of Stack
+[5]    <- Most recent (top)
+[3]
+[10]   <- Oldest
+Bottom of Stack
+```
+
 ### Stack Overflow and Underflow
 
 - **Stack overflow** occurs when pushing exceeds available memory.
@@ -26,127 +46,152 @@ The stack grows upward, with the **top** being the most recently pushed value.
 
 Both conditions halt execution with an error.
 
-## Calling Convention
+## Functions and Calling Convention
 
 ### Function Call Sequence
 
+**Argument Order:** Arguments are pushed **left-to-right**. For `add(10, 20)`:
+
+- First argument (10) is pushed first
+- Second argument (20) is pushed second
+- When the function executes, 10 is deeper in the stack, 20 is on top
+
 **Caller:**
 
-1. Push all arguments onto the stack in order (first argument pushed first, last argument pushed last).
+1. Push all arguments onto the stack in order (first argument pushed first).
 2. Emit `CALL function_label`.
 3. After the call returns, the return value is at the top of the stack.
 
-**Callee (start):**
+**Callee:**
 
 1. Arguments are already on the stack in the order they were pushed.
-2. Optionally, save argument values to local variables if needed for nested calls.
-3. Perform function logic.
+2. Perform function logic.
+3. Ensure the return value is at the top of the stack before `RET`.
 
-**Callee (end):**
+### Function Declarations
 
-1. Ensure the return value is at the top of the stack.
-2. Emit `RET`.
+A function declaration in the AST generates:
 
-### Example: Function Call
+1. A unique label for the function entry point.
+2. Bytecode for the function body.
+3. A `RET` instruction at the end.
+
+The label is registered so that `CALL` instructions can reference it.
+
+### Example: Multi-Argument Function
 
 ```
-Caller:
-  PUSH 10          ; Push first argument
-  PUSH 20          ; Push second argument
-  CALL add_label   ; Call add(10, 20)
-  ; Return value now on top of stack
+Function definition: add(x, y)
+  add_label:
+  LOAD_LOCAL 0      ; Load x (first argument)
+  LOAD_LOCAL 1      ; Load y (second argument)
+  ADD               ; Compute x + y
+  RET               ; Return result
 
-Callee (add):
-  ; Arguments: 10 (second from top), 20 (top of stack)
-  ADD              ; Pop 20 and 10, push their sum (30)
-  RET              ; Return with 30 on top of stack
+Function call: result = add(10, 20)
+  PUSH 10           ; Push first argument
+  PUSH 20           ; Push second argument
+  CALL add_label    ; Call function
+  STORE_LOCAL 0     ; Store result in local variable
 ```
 
 ## Instruction Set
 
-### Stack Manipulation Instructions
+### Stack Manipulation
 
-- **PUSH** (operand: imm i32): Push immediate value onto stack
-- **POP** (operand: none): Pop and discard top stack value
-- **DUP** (operand: none): Duplicate top stack value: `[a] -> [a, a]`
-- **SWAP** (operand: none): Swap top two values: `[a, b] -> [b, a]`
-- **ROT** (operand: none): Rotate top 3 values: `[a, b, c] -> [c, a, b]`
+| Instruction | Operand | Stack Effect       | Description                     |
+|-------------|---------|--------------------|---------------------------------|
+| **PUSH**    | imm     | `[] -> [imm]`      | Push immediate value onto stack |
+| **POP**     | none    | `[a] -> []`        | Pop and discard top value       |
+| **DUP**     | none    | `[a] -> [a, a]`    | Duplicate top value             |
+| **SWAP**    | none    | `[a, b] -> [b, a]` | Swap top two values             |
 
-### Arithmetic Instructions
+### Arithmetic
 
-- **ADD** (stack effect: `[a, b] -> [a+b]`): Pop two values, push their sum. Polymorphic (works with integers
-  and strings)
-- **SUB** (stack effect: `[a, b] -> [a-b]`): Pop two values, push difference
-- **MUL** (stack effect: `[a, b] -> [a*b]`): Pop two values, push product
-- **DIV** (stack effect: `[a, b] -> [a/b]`): Pop two values, push quotient (integer division)
-- **REM** (stack effect: `[a, b] -> [a%b]`): Pop two values, push remainder
-- **POW** (stack effect: `[a, b] -> [a^b]`): Pop two values, push power (a raised to b)
-- **NEG** (stack effect: `[a] -> [-a]`): Negate top stack value
+| Instruction | Operand | Stack Effect      | Description                                         |
+|-------------|---------|-------------------|-----------------------------------------------------|
+| **ADD**     | none    | `[a, b] -> [a+b]` | Pop two values, push sum. Polymorphic (int/string). |
+| **SUB**     | none    | `[a, b] -> [a-b]` | Pop two values, push difference                     |
+| **MUL**     | none    | `[a, b] -> [a*b]` | Pop two values, push product                        |
+| **DIV**     | none    | `[a, b] -> [a/b]` | Pop two values, push quotient (integer division)    |
+| **REM**     | none    | `[a, b] -> [a%b]` | Pop two values, push remainder                      |
+| **POW**     | none    | `[a, b] -> [a^b]` | Pop two values, push a raised to b                  |
+| **NEG**     | none    | `[a] -> [-a]`     | Negate top value                                    |
 
-### Logical Instructions
+### Logical & Bitwise
 
-- **AND** (stack effect: `[a, b] -> [a&b]`): Pop two values, push bitwise AND
-- **OR** (stack effect: `[a, b] -> [a|b]`): Pop two values, push bitwise OR
-- **XOR** (stack effect: `[a, b] -> [a^b]`): Pop two values, push bitwise XOR
-- **NOT** (stack effect: `[a] -> [!a]`): Bitwise NOT of top stack value
+| Instruction | Operand | Stack Effect       | Description             |
+|-------------|---------|--------------------|-------------------------|
+| **AND**     | none    | `[a, b] -> [a&b]`  | Bitwise AND             |
+| **OR**      | none    | `[a, b] -> [a\|b]` | Bitwise OR              |
+| **XOR**     | none    | `[a, b] -> [a^b]`  | Bitwise XOR             |
+| **NOT**     | none    | `[a] -> [~a]`      | Bitwise NOT             |
+| **SLA**     | none    | `[a, b] -> [a<<b]` | Left shift a by b bits  |
+| **SRA**     | none    | `[a, b] -> [a>>b]` | Right shift a by b bits |
 
-### Shift Instructions
+### Comparison
 
-- **SLA** (stack effect: `[a, b] -> [a << b]`): Pop two values, push left-shifted result
-- **SRA** (stack effect: `[a, b] -> [a >> b]`): Pop two values, push right-shifted result
+| Instruction | Operand | Stack Effect           | Description      |
+|-------------|---------|------------------------|------------------|
+| **EQ**      | none    | `[a, b] -> [a==b?1:0]` | Equal            |
+| **NE**      | none    | `[a, b] -> [a!=b?1:0]` | Not equal        |
+| **LT**      | none    | `[a, b] -> [a<b?1:0]`  | Less than        |
+| **GT**      | none    | `[a, b] -> [a>b?1:0]`  | Greater than     |
+| **LE**      | none    | `[a, b] -> [a<=b?1:0]` | Less or equal    |
+| **GE**      | none    | `[a, b] -> [a>=b?1:0]` | Greater or equal |
 
-### Comparison Instructions
+### Memory
 
-- **EQ** (stack effect: `[a, b] -> [a == b ? 1 : 0]`): Pop two values, push 1 if equal, 0 otherwise
-- **NE** (stack effect: `[a, b] -> [a != b ? 1 : 0]`): Pop two values, push 1 if not equal, 0 otherwise
-- **LT** (stack effect: `[a, b] -> [a < b ? 1 : 0]`): Pop two values, push 1 if less than, 0 otherwise
-- **GT** (stack effect: `[a, b] -> [a > b ? 1 : 0]`): Pop two values, push 1 if greater than, 0 otherwise
-- **LE** (stack effect: `[a, b] -> [a <= b ? 1 : 0]`): Pop two values, push 1 if less or equal, 0 otherwise
-- **GE** (stack effect: `[a, b] -> [a >= b ? 1 : 0]`): Pop two values, push 1 if greater or equal, 0 otherwise
+| Instruction     | Operand | Stack Effect          | Description                                   |
+|-----------------|---------|-----------------------|-----------------------------------------------|
+| **LOAD**        | none    | `[addr] -> [value]`   | Pop address, push value at that address       |
+| **STORE**       | none    | `[addr, value] -> []` | Pop value and address, store value to address |
+| **LOAD_LOCAL**  | index   | `[] -> [value]`       | Load local variable at index                  |
+| **STORE_LOCAL** | index   | `[value] -> []`       | Pop value, store to local variable at index   |
 
-### Memory Instructions
+### Control Flow
 
-- **LOAD** (operand: none, stack effect: `[addr] -> [value]`): Pop address from stack, get value from that
-  memory address
-- **STORE** (operand: none, stack effect: `[addr, value] -> [...]`): Pop value and address, store value to memory
-  address
-- **LOAD_LOCAL** (operand: index u8, stack effect: `[id] -> [value]`): Load local variable at index onto stack
-- **STORE_LOCAL** (operand: index u8, stack effect: `[value] -> [id]`): Pop value from stack, store to local
-  variable at index
+| Instruction | Operand | Stack Effect                       | Description                                    |
+|-------------|---------|------------------------------------|------------------------------------------------|
+| **JMP**     | label   | `[...] -> [...]`                   | Unconditional jump to label                    |
+| **JMPT**    | label   | `[cond] -> [...]`                  | Pop condition, jump if non-zero                |
+| **JMPF**    | label   | `[cond] -> [...]`                  | Pop condition, jump if zero                    |
+| **CALL**    | label   | `[args...] -> [return_value]`      | Call function, return address saved implicitly |
+| **RET**     | none    | `[return_value] -> [return_value]` | Return from function                           |
 
-### Control Flow Instructions
+### Misc
 
-- **JMP** (operand: label i32, stack effect: `[...] -> [...]`): Unconditional jump to instruction at label
-- **JMPT** (operand: label i32, stack effect: `[cond] -> [...]`): Pop condition; jump if non-zero (true)
-- **JMPF** (operand: label i32, stack effect: `[cond] -> [...]`): Pop condition; jump if zero (false)
-- **CALL** (operand: label i32, stack effect: `[args...] -> [return_value]`): Call function at label; return
-  address saved implicitly
-- **RET** (operand: none, stack effect: `[return_value] -> [return_value]`): Return from function; stack cleared
-  except return value
-
-### Miscellaneous Instructions
-
-- **NOP** (operand: none): No operation
-- **HALT** (operand: none): Stop execution
+| Instruction | Operand | Stack Effect     | Description    |
+|-------------|---------|------------------|----------------|
+| **NOP**     | none    | `[...] -> [...]` | No operation   |
+| **HALT**    | none    | `[...] -> [...]` | Stop execution |
 
 ## Local Variables
 
-### Allocation and Access
+### Storage and Indexing
 
-Local variables are stored in a **local frame** associated with each function call. Each function has a frame with a
-fixed number of slots, indexed from 0 onwards.
+Local variables are stored in a **local frame** associated with each function call. The frame contains slots indexed
+from 0 onwards.
 
-- **LOAD_LOCAL index**: Pushes the value at local slot `index` onto the stack.
-- **STORE_LOCAL index**: Pops a value from the stack and stores it in local slot `index`.
+**Important:** Function arguments occupy the first slots in the local frame. For example, in `func add(x, y)`:
+
+- `x` is at local index 0
+- `y` is at local index 1
+- Any additional local variables start at index 2
+
+### Access Instructions
+
+- **LOAD_LOCAL index**: Push the value at local slot `index` onto the stack.
+- **STORE_LOCAL index**: Pop a value from the stack and store it in local slot `index`.
 
 ### Lifetime
 
-Local variables exist for the duration of a function call. When a function returns via `RET`, the local frame is
-destroyed and the next function call gets a fresh frame.
+Local variables (including arguments) exist for the duration of a function call. When a function returns via `RET`, the
+local frame is destroyed and the next function call gets a fresh frame.
 
 ### Limits
 
-A function can have at most **256 local variables** (indices 0–255). Attempting to allocate more is an error.
+A function can have at most **2,147,483,647 local variables**. If you need more you're mentally ill.
 
 ### Example: Multiple Locals
 
@@ -179,91 +224,57 @@ Function: compute()
 
 ### Global Data Storage
 
-Global variables, string literals, and array constants are stored in the **heap** (data blob) managed by the
-`Executable`.
+Global variables, string literals, and array constants are stored in a **data blob** (managed by the `Executable`). This
+is not a traditional heap. It's a fixed, read-only section of memory allocated at executable load time.
 
-### Accessing Global Data
+### How It Works
 
-1. **Allocate space**: During code generation, call `Executable::insert_data(id, bytes, name)` to store data.
-2. **Load data ID**: Use `PUSH data_id` to push the data section ID onto the stack.
-3. **Resolve at compilation**: The linker resolves the data ID to a heap address via the `RelocationTable`.
-4. **Access via memory**: Use `LOAD` or `STORE` to read from or write to the resolved heap address.
+1. **Allocation**: During code generation, call `Executable::insert_data(id, bytes, name)` to store data.
+2. **Reference**: Use `PUSH data_id` to push the data section ID onto the stack.
+3. **Resolution**: The linker resolves the data ID to a memory address via the `RelocationTable`.
+4. **Access**: Use `LOAD` or `STORE` to read from or write to the resolved address.
 
 ### Example: Global String
 
 ```
-Data section ID: 0 contains "hello" (5 bytes)
+Data section ID: 0 contains "hello" (5 bytes at address 1000)
 
 Bytecode:
   PUSH 0      ; Push data_id (section 0)
-  LOAD        ; Dereference to get heap address; push first byte
+  LOAD        ; Resolve to address 1000, push first byte of "hello"
 ```
 
 ## Labels and Jumps
 
-### Label Registration
+### Label Resolution
 
-Labels are resolved at executable construction time. Each label is a unique 32-bit identifier that maps to an
-instruction offset.
+Labels are resolved during **executable construction** by the linker. Each label maps to an instruction offset (the
+position of that instruction in the bytecode).
 
-When emitting a `CALL`, `JMP`, `JMPT`, or `JMPF` instruction, use the label ID, The linker resolves label IDs to
-instruction offsets.
+When you emit a `CALL`, `JMP`, `JMPT`, or `JMPF` instruction, you reference the label by its **ID**. The linker later
+resolves this ID to the actual instruction offset.
 
-### Example: If-Then-Else
+### Example: Conditional Jump
 
 ```
 Condition: x > 5
 
 Bytecode:
-  PUSH 5              ; Push 5
-  GT                  ; Pop x and 5, push (x > 5) as 1 or 0
-  JMPF else_label     ; If false (0), jump to else
-  
+  LOAD_LOCAL 0    ; Push x
+  PUSH 5          ; Push 5
+  GT              ; Pop both, push (x > 5) as 1 or 0
+  JMPF else_label ; If false (0), jump to else
+
   ; Then branch
   PUSH 10
   JMP end_label
-  
+
   ; Else branch
   else_label:
   PUSH 20
-  
+
   end_label:
   ; Continue (value is on stack)
-```
-
-## Function Declarations and Calls
-
-### Declaring a Function
-
-A function declaration in the AST generates:
-
-1. A unique label for the function entry point.
-2. Bytecode for the function body.
-3. A `RET` instruction at the end.
-
-The label is registered so that `CALL` instructions can reference it.
-
-### Calling a Function
-
-1. Push all arguments onto the stack in order.
-2. Emit `CALL function_label`.
-3. After the call, the return value is at the top of the stack.
-
-### Example: Multi-Argument Function
-
-```
-Function definition: add(x, y)
-  add_label:
-  LOAD_LOCAL 0      ; Load x (first argument)
-  LOAD_LOCAL 1      ; Load y (second argument)
-  ADD               ; Compute x + y
-  RET               ; Return result
-
-Function call: result = add(10, 20)
-  PUSH 10           ; Push first argument
-  PUSH 20           ; Push second argument
-  CALL add_label    ; Call function
-  STORE_LOCAL 2     ; Store result in local variable
 ```
 
 ## Instruction Encoding
@@ -272,13 +283,24 @@ Function call: result = add(10, 20)
 
 Each instruction is encoded as **5 bytes**:
 
-- **Byte 0**: Opcode (1 byte, u8)
-- **Bytes 1–4**: Operand (4 bytes, i32, little-endian)
+| Bytes | Size    | Content                      |
+|-------|---------|------------------------------|
+| 0     | 1 byte  | Opcode (u8)                  |
+| 1–4   | 4 bytes | Operand (i32, little-endian) |
 
 ## Executable Format
 
-The `Executable` struct contains:
+The `Executable` struct is the compiled output of the Morsel compiler. It contains:
 
-- **Header**: Contains magic number, version info, etc.
-- **Instructions**: An array of bytecode instructions.
-- **Data blob**: Raw bytes for global data (strings, arrays, constants).
+| Component        | Description                                             |
+|------------------|---------------------------------------------------------|
+| **Header**       | Magic number, version info, offsets, entry point offset |
+| **Instructions** | Array of bytecode instructions                          |
+| **Data Blob**    | Raw bytes for global data (strings, arrays, constants)  |
+
+### Loading and Execution
+
+1. The VM reads the header to validate the executable.
+2. Instructions are loaded into instruction memory.
+3. The data blob is loaded into heap memory.
+4. Execution begins at the `main` function.

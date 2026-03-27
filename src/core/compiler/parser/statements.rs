@@ -5,7 +5,7 @@ use crate::core::compiler::preprocessor::token::{
 };
 
 impl<'a> Parser<'a> {
-    pub fn parse_statement(&mut self) -> Result<Node, ()> {
+    pub fn parse_statement_or_expression(&mut self) -> Result<Node, ()> {
         match self.peek_token_type()? {
             TokenType::Keyword(KeywordValue::If) => self.parse_if(),
             TokenType::Keyword(KeywordValue::While) => self.parse_while(),
@@ -28,10 +28,20 @@ impl<'a> Parser<'a> {
         let condition = self.parse_expression(0)?;
         self.expect_syntax(SyntaxValue::RParen)?;
 
-        let then_branch = self.parse_statement()?;
+        let then_branch = if self.check_syntax(SyntaxValue::LBrace) {
+            self.parse_block()?
+        } else {
+            self.parse_statement_or_expression()?
+        };
 
         let else_branch = if self.match_keyword(KeywordValue::Else) {
-            Some(Box::new(self.parse_statement()?))
+            Some(Box::new(if self.check_syntax(SyntaxValue::LBrace) {
+                self.parse_block()?
+            } else if self.match_keyword(KeywordValue::If) {
+                self.parse_if()? // else if
+            } else {
+                self.parse_statement_or_expression()?
+            }))
         } else {
             None
         };
@@ -50,7 +60,11 @@ impl<'a> Parser<'a> {
         let condition = self.parse_expression(0)?;
         self.expect_syntax(SyntaxValue::RParen)?;
 
-        let body = self.parse_statement()?;
+        let body = if self.check_syntax(SyntaxValue::LBrace) {
+            self.parse_block()?
+        } else {
+            self.parse_statement_or_expression()?
+        };
 
         Ok(Node::While {
             condition: Box::new(condition),
@@ -70,7 +84,7 @@ impl<'a> Parser<'a> {
         };
 
         self.expect_syntax(SyntaxValue::Assign)?;
-        let value = self.parse_expression(0)?;
+        let value = self.parse_statement_or_expression()?;
         self.consume_terminator();
 
         Ok(Node::VariableDecl {
@@ -96,7 +110,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let body = self.parse_statement()?;
+        let body = self.parse_statement_or_expression()?;
 
         // Wrap in a Block
         let body = match body {
@@ -151,8 +165,14 @@ impl<'a> Parser<'a> {
         let mut statements = Vec::new();
 
         while !self.is_eof() && !self.check_syntax(SyntaxValue::RBrace) {
-            match self.parse_statement() {
-                Ok(stmt) => statements.push(stmt),
+            match self.parse_statement_or_expression() {
+                Ok(stmt) => {
+                    statements.push(stmt);
+
+                    if !self.check_syntax(SyntaxValue::RBrace) {
+                        self.consume_terminator();
+                    }
+                }
                 Err(()) => {
                     // Use panic mode to recover within block
                     self.panic_mode_block();

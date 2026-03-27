@@ -14,7 +14,7 @@ use crate::core::compiler::error_handler::CompilerError;
 use crate::core::compiler::parser::analyzer::SemanticAnalyzer;
 use crate::core::compiler::parser::tree::ParserOutput;
 use crate::core::compiler::preprocessor::token::{
-	KeywordValue, LexerOutput, OperatorValue, SyntaxValue, Token, TokenType,
+    KeywordValue, LexerOutput, OperatorValue, SyntaxValue, Token, TokenType,
 };
 use crate::core::compiler::source::SourceCode;
 use lasso::{Rodeo, Spur};
@@ -41,7 +41,7 @@ impl<'a> Parser<'a> {
 
     pub fn parse(mut self) -> ParserOutput {
         while !self.is_eof() {
-            match self.parse_statement() {
+            match self.parse_statement_or_expression() {
                 Ok(node) => self.output.nodes.push(node),
                 Err(()) => {
                     // Enter panic mode

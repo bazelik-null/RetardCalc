@@ -102,7 +102,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     fn gen_variable_decl(&mut self, name: Spur, value: &Node) -> Result<(), String> {
-        let local_id = self.allocate_local_id();
+        let local_id = self.scope.allocate_local_id();
         self.scope.declare(name, local_id)?;
 
         self.generate_node(value)?;
@@ -208,7 +208,7 @@ impl<'a> CodeGenerator<'a> {
         }
 
         // Update next_local_id to account for parameters
-        self.next_local_id = params.len() as i32;
+        self.scope.next_local_id = params.len() as i32;
 
         // Generate function body
         self.generate_node(body)?;
@@ -223,7 +223,7 @@ impl<'a> CodeGenerator<'a> {
         }
 
         // Reset local_id counter for next function
-        self.next_local_id = 0;
+        self.scope.next_local_id = 0;
 
         Ok(())
     }

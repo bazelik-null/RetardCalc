@@ -11,7 +11,7 @@ impl Disassembler {
         let mut output = String::new();
 
         output.push_str(&"\n BYTECODE DISASSEMBLY\n".bold().cyan().to_string());
-        output.push_str(&"═".repeat(60).cyan().to_string());
+        output.push_str(&"═".repeat(75).cyan().to_string());
         output.push('\n');
 
         Self::write_header(&mut output, executable);
@@ -19,7 +19,7 @@ impl Disassembler {
         Self::write_code_section(&mut output, executable);
 
         output.push('\n');
-        output.push_str(&"═".repeat(60).cyan().to_string());
+        output.push_str(&"═".repeat(75).cyan().to_string());
         output.push('\n');
         output.push_str(&" END OF DISASSEMBLY\n".bold().cyan().to_string());
 
@@ -56,7 +56,7 @@ impl Disassembler {
 
     fn write_header(output: &mut String, executable: &Executable) {
         output.push_str(&" FILE HEADER\n".bold().yellow().to_string());
-        output.push_str(&"─".repeat(60).yellow().to_string());
+        output.push_str(&"─".repeat(75).yellow().to_string());
         output.push('\n');
         output.push_str(&format!(
             "  {} {}\n",
@@ -82,24 +82,13 @@ impl Disassembler {
         }
 
         output.push_str(&" DATA SECTION\n".bold().yellow().to_string());
-        output.push_str(&"─".repeat(60).yellow().to_string());
+        output.push_str(&"─".repeat(75).yellow().to_string());
         output.push('\n');
 
         let data = executable.data();
 
-        // Calculate max hex dump width for alignment
-        let max_hex_width = data
-            .chunks(16)
-            .map(|chunk| {
-                chunk
-                    .iter()
-                    .map(|b| format!("{:02x}", b))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-                    .len()
-            })
-            .max()
-            .unwrap_or(0);
+        // Max visual width of hex dump (16 bytes = 47 chars)
+        let max_hex_width = 47;
 
         output.push_str(&format!(
             "  {:<8} {:<width$} {}\n",
@@ -111,11 +100,23 @@ impl Disassembler {
 
         for (i, chunk) in data.chunks(16).enumerate() {
             let offset = i * 16;
-            let hex_str = chunk
+
+            // Build hex string with colors
+            let hex_colored = chunk
                 .iter()
                 .map(|b| format!("{:02x}", b).bright_black().to_string())
                 .collect::<Vec<_>>()
                 .join(" ");
+
+            // Calculate visual length (without ANSI codes)
+            let hex_visual_len = chunk.len() * 3 - 1;
+
+            // Pad with spaces to align ASCII column
+            let hex_padded = format!(
+                "{}{}",
+                hex_colored,
+                " ".repeat(max_hex_width - hex_visual_len + 2)
+            );
 
             let ascii_str = chunk
                 .iter()
@@ -129,11 +130,10 @@ impl Disassembler {
                 .collect::<String>();
 
             output.push_str(&format!(
-                "  {:<8} {:<width$} {}\n",
+                "  {}  {}{}\n",
                 format!("0x{:04x}", offset).cyan(),
-                hex_str,
-                ascii_str,
-                width = max_hex_width
+                hex_padded,
+                ascii_str
             ));
         }
         output.push('\n');
@@ -141,7 +141,7 @@ impl Disassembler {
 
     fn write_code_section(output: &mut String, executable: &Executable) {
         output.push_str(&" CODE SECTION\n".bold().yellow().to_string());
-        output.push_str(&"─".repeat(60).yellow().to_string());
+        output.push_str(&"─".repeat(75).yellow().to_string());
         output.push('\n');
         output.push_str(&format!(
             "  {:<10} {}\n",

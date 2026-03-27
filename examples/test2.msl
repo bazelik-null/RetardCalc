@@ -1,17 +1,22 @@
 // Test file
 
-func divide(x: int, y: int): int {
-    if (x == 0 || y == 0) {
-        return 0;
-    }
+func main() {
+    let x = 5;
 
-    x / y
+    let message = is_positive(x);
+    print(message);
 }
 
-func main() {
-    let x = 1;
-    let y = 2;
-    let mut result = 0;
+func print(message: string) {
+    // Placeholder
+}
 
-    result = divide(x, y);
+func is_positive(x: int): string {
+    let message = if (x > 0) {
+        "positive"
+    } else {
+        "non-positive"
+    }
+
+    message
 }

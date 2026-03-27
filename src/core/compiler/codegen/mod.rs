@@ -11,6 +11,7 @@ use std::collections::HashMap;
 pub struct Scope {
     variables: HashMap<Spur, Operand>,
     parent: Option<Box<Scope>>,
+    next_local_id: Operand,
 }
 
 impl Default for Scope {
@@ -24,6 +25,7 @@ impl Scope {
         Self {
             variables: HashMap::new(),
             parent: None,
+            next_local_id: 0,
         }
     }
 
@@ -31,6 +33,7 @@ impl Scope {
         Self {
             variables: HashMap::new(),
             parent: Some(Box::new(parent)),
+            next_local_id: 0,
         }
     }
 
@@ -48,6 +51,12 @@ impl Scope {
             .copied()
             .or_else(|| self.parent.as_ref().and_then(|p| p.lookup(name)))
     }
+
+    pub fn allocate_local_id(&mut self) -> Operand {
+        let id = self.next_local_id;
+        self.next_local_id += 1;
+        id
+    }
 }
 
 /// Metadata about a function for the first pass
@@ -60,7 +69,6 @@ pub struct CodeGenerator<'a> {
     instructions: Vec<Instruction>,
     next_data_id: Operand,
     scope: Scope,
-    next_local_id: Operand,
     next_label_id: Operand,
 
     // Track symbols and relocations during generation
@@ -77,10 +85,9 @@ impl<'a> CodeGenerator<'a> {
         Self {
             rodeo,
             instructions: vec![],
-            next_data_id: 0,
+            next_label_id: 0,      // Label namespace: 0 - 99,999
+            next_data_id: 100_000, // Data namespace: 100,000 - i32 limit
             scope: Scope::new(),
-            next_local_id: 0,
-            next_label_id: 0,
             pending_data: vec![],
             pending_labels: vec![],
             pending_relocations: vec![],
@@ -190,12 +197,6 @@ impl<'a> CodeGenerator<'a> {
     fn allocate_data_id(&mut self) -> Operand {
         let id = self.next_data_id;
         self.next_data_id += 1;
-        id
-    }
-
-    fn allocate_local_id(&mut self) -> Operand {
-        let id = self.next_local_id;
-        self.next_local_id += 1;
         id
     }
 

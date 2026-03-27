@@ -10,7 +10,8 @@ to write morsel programs.
 3. [Data Types](#data-types)
 4. [Operators](#operators)
 5. [Control Flow](#control-flow)
-6. [Functions](#functions)
+6. [Loops](#loops)
+7. [Functions](#functions)
 
 ## Comments
 
@@ -55,7 +56,8 @@ let x = x * 2; // x is now 12
 
 ## Data Types
 
-Morsel is **statically typed**. The compiler can usually infer types, but you can also explicitly annotate them.
+Morsel is **statically** and **strictly** typed! The type of variable is known at compile time and cannot change,
+preventing type errors during program execution.
 
 ### Built-in Types
 
@@ -66,29 +68,50 @@ Morsel is **statically typed**. The compiler can usually infer types, but you ca
 
 ### Arrays
 
-To define a **fixed-size array**, wrap the type into `[type: n]`:
+Morsel supports both **fixed-size** and **dynamic arrays**.
+
+**Fixed-size arrays** have their length known at compile-time:
 
 ```morsel
-let mut x: [int: 3] = [0, 1, 2]
-x[0] = 1;
+let mut x: [int: 3] = [0, 1, 2];
+x[0] = 1; // OK
+// x[10] = 5; // Error: compile-time bounds check
 ```
 
-To define a **dynamic array**, wrap the type into just `[type]`:
+Fixed arrays are **safe** because out-of-bounds access is caught at compile-time.
+
+**Dynamic arrays** have their length determined at runtime:
 
 ```morsel
-let mut x: [int] = [0, 1, 2]
-x[0] = 1;
+let mut x: [int] = [0, 1, 2];
+x[0] = 1; // OK
+x[10] = 5; // Compiles, but may fail at runtime
 ```
 
-**WARNING:** Dynamic arrays are unsafe because out-of-bounds access is **not** checked at compile-time. The following
-compiles but may fail at runtime:
+**Warning:** Dynamic arrays don't have compile-time bounds checking. Out-of-bounds access compiles but crashes at
+runtime. Use fixed arrays when you know the size.
+
+## Type System
+
+### Type Inference
+
+Morsel automatically infers types from context:
 
 ```morsel
-let mut x: [int] = [0, 1, 2]
-x[10] = 5;  // Error: Compiles, but out-of-bounds at runtime
+let x = 5;                // inferred as int
+let y = 3.14;             // inferred as float
+let name = "hi";          // inferred as string
+let input = get_string(); // inferred as string from func return
 ```
 
-Use fixed arrays `[type: n]` when you know the size upfront for compile-time safety.
+### Explicit Type Annotations
+
+When inference isn't clear, provide explicit types:
+
+```morsel
+let x: int = 5;
+let items: [string: 3] = ["a", "b", "c"];
+```
 
 ## Operators
 
@@ -132,17 +155,66 @@ t || f; // true (OR)
 
 ## Control Flow
 
-### if/else Expressions
+In Morsel, `if/else` is an **expression**, meaning it returns a value:
 
 ```morsel
 let x = 5;
 
+let message = if (x > 0) {
+    "positive"
+} else {
+    "non-positive"
+}
+
+println(message);
+```
+
+You can also use it as a statement:
+
+```morsel
 if (x > 0) {
     println("x is positive");
-} else if (x < 0) {
-    println("x is negative");
 } else {
-    println("x is zero");
+    println("x is not positive");
+}
+```
+
+## Loops
+
+### while Loops
+
+```morsel
+let mut i = 0;
+while (i < 5) {
+    println(i);
+    i += 1;
+}
+```
+
+### for Loops
+
+```morsel
+for (let mut i = 0; i < 5; i += 1) {
+    println(i);
+}
+```
+
+### Loop Control
+
+```morsel
+// break - Exit the loop
+while (true) {
+    if (condition) {
+        break;
+    }
+}
+
+// continue - Skip to next iteration
+for (let mut i = 0; i < 10; i += 1) {
+    if (i % 2 == 0) {
+        continue;
+    }
+    println(i);
 }
 ```
 

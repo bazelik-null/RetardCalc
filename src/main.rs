@@ -1,6 +1,6 @@
 pub mod core;
 
-use crate::core::compiler::compiler::BytecodeCompiler;
+use crate::core::compiler::codegen::CodeGenerator;
 use crate::core::compiler::error_handler::CompilerError;
 use crate::core::compiler::parser::Parser;
 use crate::core::compiler::preprocessor::lexer::Lexer;
@@ -36,7 +36,7 @@ fn main() {
                     process::exit(1);
                 }
             }
-            Command::Run(path) => {
+            Command::Run(_path) => {
                 todo!()
             }
         },
@@ -195,7 +195,7 @@ fn build(rodeo: &mut Rodeo, source: &SourceCode) -> Result<Executable, Vec<Compi
 
     // Code generation phase
     let codegen_start = Instant::now();
-    let compiler = BytecodeCompiler::new(rodeo);
+    let compiler = CodeGenerator::new(rodeo);
     match compiler.compile(&parser_output.nodes) {
         Ok(exe) => {
             let codegen_duration = codegen_start.elapsed();

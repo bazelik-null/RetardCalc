@@ -1,10 +1,10 @@
-use crate::core::compiler::compiler::{BytecodeCompiler, Scope};
+use crate::core::compiler::codegen::{CodeGenerator, Scope};
 use crate::core::compiler::parser::tree::{Node, Parameter};
 use crate::core::compiler::preprocessor::token::{LiteralValue, OperatorValue};
 use crate::core::shared::bytecode::Opcode::*;
 use lasso::Spur;
 
-impl<'a> BytecodeCompiler<'a> {
+impl<'a> CodeGenerator<'a> {
     pub fn generate_node(&mut self, node: &Node) -> Result<(), String> {
         match node {
             Node::Literal(value) => self.gen_literal(value),

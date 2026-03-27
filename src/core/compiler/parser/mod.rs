@@ -14,7 +14,7 @@ use crate::core::compiler::error_handler::CompilerError;
 use crate::core::compiler::parser::analyzer::SemanticAnalyzer;
 use crate::core::compiler::parser::tree::ParserOutput;
 use crate::core::compiler::preprocessor::token::{
-    KeywordValue, LexerOutput, OperatorValue, SyntaxValue, Token, TokenType,
+	KeywordValue, LexerOutput, OperatorValue, SyntaxValue, Token, TokenType,
 };
 use crate::core::compiler::source::SourceCode;
 use lasso::{Rodeo, Spur};
@@ -57,7 +57,7 @@ impl<'a> Parser<'a> {
                 // Semantic analysis passed
             }
             Err(semantic_errors) => {
-                // Convert semantic errors to compiler errors
+                // Convert semantic errors to codegen errors
                 for sem_err in semantic_errors {
                     let compiler_err = CompilerError::new(
                         sem_err,

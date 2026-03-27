@@ -5,7 +5,7 @@ use std::fmt::Formatter;
 #[derive(Debug, Default, Clone)]
 pub struct CompilerError {
     message: String, // Error message
-    from: String,    // From which part of the compiler
+    from: String,    // From which part of the codegen
     line: u16,       // Line with error
     column: u16,     // Character offset from line start
     length: u16,

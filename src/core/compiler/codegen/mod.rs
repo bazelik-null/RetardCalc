@@ -53,10 +53,9 @@ impl Scope {
 /// Metadata about a function for the first pass
 struct FunctionMetadata {
     label: Operand,
-    params_count: usize,
 }
 
-pub struct BytecodeCompiler<'a> {
+pub struct CodeGenerator<'a> {
     rodeo: &'a Rodeo,
     instructions: Vec<Instruction>,
     next_data_id: Operand,
@@ -73,7 +72,7 @@ pub struct BytecodeCompiler<'a> {
     functions: HashMap<Spur, FunctionMetadata>,
 }
 
-impl<'a> BytecodeCompiler<'a> {
+impl<'a> CodeGenerator<'a> {
     pub fn new(rodeo: &'a Rodeo) -> Self {
         Self {
             rodeo,
@@ -93,6 +92,16 @@ impl<'a> BytecodeCompiler<'a> {
     pub fn compile(mut self, nodes: &[Node]) -> Result<Executable, String> {
         // Collect all function declarations and assign labels (first pass)
         self.collect_functions(nodes)?;
+
+        // Get main function label
+        let entry_name = self
+            .rodeo
+            .get("main")
+            .ok_or_else(|| "Main function not found.".to_string())?;
+        let entry_point = self
+            .scope
+            .lookup(entry_name)
+            .ok_or_else(|| "Main function not found.".to_string())?;
 
         // Generate code for each node (second pass)
         for n in nodes.iter() {
@@ -121,7 +130,7 @@ impl<'a> BytecodeCompiler<'a> {
         }
 
         // Link and produce executable
-        let executable = linker.link()?;
+        let executable = linker.link(entry_point)?;
 
         Ok(executable)
     }
@@ -129,15 +138,9 @@ impl<'a> BytecodeCompiler<'a> {
     /// Scan all nodes and collect function declarations
     fn collect_functions(&mut self, nodes: &[Node]) -> Result<(), String> {
         for node in nodes {
-            if let Node::FunctionDecl { name, params, .. } = node {
+            if let Node::FunctionDecl { name, .. } = node {
                 let label = self.allocate_label_id();
-                self.functions.insert(
-                    *name,
-                    FunctionMetadata {
-                        label,
-                        params_count: params.len(),
-                    },
-                );
+                self.functions.insert(*name, FunctionMetadata { label });
                 // Declare the function in the global scope
                 self.scope.declare(*name, label)?;
             }

@@ -11,20 +11,22 @@ const VERSION: u16 = 0;
 pub struct Header {
     magic_number: [u8; 4],
     version_number: u16,
-    instructions_size: u64,
-    data_offset: u64,
-    data_size: u64,
+    instructions_size: u32,
+    data_offset: u32,
+    data_size: u32,
+    entry_point: u32,
 }
 
 impl Header {
-    fn new(instructions_size: usize, data_size: usize) -> Self {
+    fn new(instructions_size: usize, data_size: usize, entry_point: usize) -> Self {
         let header_size = size_of::<Header>();
         Header {
             magic_number: MAGIC_NUMBER,
             version_number: VERSION,
-            instructions_size: instructions_size as u64,
-            data_offset: (header_size + instructions_size) as u64,
-            data_size: data_size as u64,
+            instructions_size: instructions_size as u32,
+            data_offset: (header_size + instructions_size) as u32,
+            data_size: data_size as u32,
+            entry_point: entry_point as u32,
         }
     }
 }
@@ -37,12 +39,12 @@ pub struct Executable {
 }
 
 impl Executable {
-    pub fn new(instructions: Vec<Instruction>, data: Vec<u8>) -> Self {
+    pub fn new(instructions: Vec<Instruction>, entry_point: usize, data: Vec<u8>) -> Self {
         let instructions_size = instructions.len() * Instruction::SIZE;
         let data_size = data.len();
 
         Executable {
-            header: Header::new(instructions_size, data_size),
+            header: Header::new(instructions_size, data_size, entry_point),
             instructions,
             data,
         }
@@ -68,6 +70,10 @@ impl Executable {
         self.data.len()
     }
 
+    pub fn entry_point(&self) -> usize {
+        self.header.entry_point as usize
+    }
+
     /// Serialize to binary format.
     pub fn serialize(&self) -> Vec<u8> {
         let mut buffer = Vec::new();
@@ -78,10 +84,11 @@ impl Executable {
         buffer.extend_from_slice(&self.header.instructions_size.to_le_bytes());
         buffer.extend_from_slice(&self.header.data_offset.to_le_bytes());
         buffer.extend_from_slice(&self.header.data_size.to_le_bytes());
+        buffer.extend_from_slice(&self.header.entry_point.to_le_bytes());
 
         // Pad to match struct size (2 bytes of padding after version_number)
         let header_size = size_of::<Header>();
-        let written = 4 + 2 + 8 + 8 + 8; // 30 bytes
+        let written = 4 + 2 + 4 + 4 + 4 + 4; // 22 bytes
         buffer.extend_from_slice(&vec![0u8; header_size - written]);
 
         // Write instructions
@@ -112,9 +119,10 @@ impl Executable {
             return Err(format!("Unsupported version: {}", version));
         }
 
-        let instructions_size = u64::from_le_bytes(bytes[6..14].try_into().unwrap()) as usize;
-        let data_offset = u64::from_le_bytes(bytes[14..22].try_into().unwrap()) as usize;
-        let data_size = u64::from_le_bytes(bytes[22..30].try_into().unwrap()) as usize;
+        let instructions_size = u32::from_le_bytes(bytes[6..10].try_into().unwrap()) as usize;
+        let data_offset = u32::from_le_bytes(bytes[10..14].try_into().unwrap()) as usize;
+        let data_size = u32::from_le_bytes(bytes[14..18].try_into().unwrap()) as usize;
+        let entry_point = u32::from_le_bytes(bytes[18..22].try_into().unwrap()) as usize;
 
         // Validate
         if header_size + instructions_size > bytes.len() {
@@ -141,7 +149,7 @@ impl Executable {
         let data = bytes[data_offset..data_offset + data_size].to_vec();
 
         Ok(Executable {
-            header: Header::new(instructions_size, data_size),
+            header: Header::new(instructions_size, data_size, entry_point),
             instructions,
             data,
         })

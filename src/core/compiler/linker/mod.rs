@@ -183,13 +183,16 @@ impl Linker {
     }
 
     /// Resolve all symbols and apply relocations.
-    pub fn link(mut self) -> Result<Executable, String> {
+    pub fn link(mut self, entry_point: Operand) -> Result<Executable, String> {
         // Apply all relocations
         for relocation in self.relocation_queue.entries().to_vec() {
             self.apply_relocation(relocation)?;
         }
 
-        Ok(Executable::new(self.instructions, self.data))
+        // Get entry point address
+        let main_address = self.get_symbol_address(entry_point)?;
+
+        Ok(Executable::new(self.instructions, main_address, self.data))
     }
 
     fn apply_relocation(&mut self, relocation: UnresolvedRelocation) -> Result<(), String> {
@@ -202,25 +205,29 @@ impl Linker {
         }
 
         // Resolve the symbol
-        let symbol = self.symbol_table.resolve(relocation.symbol)?;
-
-        // Compute the address based on symbol type
-        let base = match symbol {
-            Symbol::Label { offset } => offset as isize,
-            Symbol::DataSection { offset, .. } => offset as isize,
-        };
+        let base = self.get_symbol_address(relocation.symbol)?;
 
         let addr = if relocation.addend >= 0 {
-            base.checked_add(relocation.addend)
-                .ok_or_else(|| "Relocation addend overflow".to_string())? as usize
+            base.checked_add(relocation.addend as usize)
+                .ok_or_else(|| "Relocation addend overflow".to_string())?
         } else {
-            base.checked_sub(-relocation.addend)
-                .ok_or_else(|| "Relocation addend underflow".to_string())? as usize
+            base.checked_sub(-relocation.addend as usize)
+                .ok_or_else(|| "Relocation addend underflow".to_string())?
         };
 
         // Patch the instruction operand
         self.instructions[relocation.instruction_offset].operand = addr as Operand;
 
         Ok(())
+    }
+    pub fn get_symbol_address(&self, symbol: Operand) -> Result<usize, String> {
+        match self.symbol_table.resolve(symbol)? {
+            Symbol::Label { offset } => Ok(offset),
+            Symbol::DataSection { offset, .. } => Ok(offset),
+        }
+    }
+
+    pub fn symbol_table(&self) -> &SymbolTable {
+        &self.symbol_table
     }
 }

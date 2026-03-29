@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 pub type Operand = i32;
 
 #[allow(non_camel_case_types)]
@@ -5,11 +7,13 @@ pub type Operand = i32;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Opcode {
     // Stack manipulation
-    PUSH = 0x00, // Push immediate value onto stack
-    POP = 0x01,  // Pop and discard top stack value
-    DUP = 0x02,  // Duplicate top stack value
-    SWAP = 0x03, // Swap top two values
-    ROT = 0x04,  // Rotate top 3: [a,b,c] → [c,a,b]
+    PUSH_IMM = 0x00,       // Push immediate value onto stack
+    PUSH_HEAP_REF = 0x01,  // Push heap reference
+    PUSH_LOCAL_REF = 0x02, // Push local reference
+    POP = 0x03,            // Pop and discard top stack value
+    DUP = 0x04,            // Duplicate top stack value
+    SWAP = 0x05,           // Swap top two values
+    ROT = 0x06,            // Rotate top 3: [a,b,c] → [c,a,b]
 
     // Arithmetic
     ADD = 0x10, // Pop two values, push their sum. Polymorphic, works with strings.
@@ -52,19 +56,22 @@ pub enum Opcode {
     RET = 0x64,  // Return from function
 
     // Misc
-    NOP = 0xFF,  // No operation
-    HALT = 0xFE, // Stop execution
+    NOP = 0xFF,     // No operation
+    HALT = 0xFE,    // Stop execution
+    SYSCALL = 0xFD, // Call system func
 }
 
 impl Opcode {
     /// Convert u8 to Opcode, returning error if invalid.
     pub fn from_u8(byte: u8) -> Result<Self, String> {
         match byte {
-            0x00 => Ok(Opcode::PUSH),
-            0x01 => Ok(Opcode::POP),
-            0x02 => Ok(Opcode::DUP),
-            0x03 => Ok(Opcode::SWAP),
-            0x04 => Ok(Opcode::ROT),
+            0x00 => Ok(Opcode::PUSH_IMM),
+            0x01 => Ok(Opcode::PUSH_HEAP_REF),
+            0x02 => Ok(Opcode::PUSH_LOCAL_REF),
+            0x03 => Ok(Opcode::POP),
+            0x04 => Ok(Opcode::DUP),
+            0x05 => Ok(Opcode::SWAP),
+            0x06 => Ok(Opcode::ROT),
             0x10 => Ok(Opcode::ADD),
             0x11 => Ok(Opcode::SUB),
             0x12 => Ok(Opcode::MUL),
@@ -95,6 +102,7 @@ impl Opcode {
             0x64 => Ok(Opcode::RET),
             0xFF => Ok(Opcode::NOP),
             0xFE => Ok(Opcode::HALT),
+            0xFD => Ok(Opcode::SYSCALL),
             _ => Err(format!("Invalid opcode: 0x{:02X}", byte)),
         }
     }
@@ -157,5 +165,68 @@ impl Instruction {
         }
 
         Ok(instructions)
+    }
+}
+
+impl Display for Instruction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let string = match self.opcode {
+            // Stack manipulation
+            Opcode::PUSH_IMM => format!("PUSH.IMM {}", self.operand),
+            Opcode::PUSH_HEAP_REF => format!("PUSH.HEAP.REF 0x{:06x}", self.operand),
+            Opcode::PUSH_LOCAL_REF => format!("PUSH.LOCAL.REF {}", self.operand),
+            Opcode::POP => "POP".to_string(),
+            Opcode::DUP => "DUP".to_string(),
+            Opcode::SWAP => "SWAP".to_string(),
+            Opcode::ROT => "ROT".to_string(),
+
+            // Arithmetic operations
+            Opcode::ADD => "ADD".to_string(),
+            Opcode::SUB => "SUB".to_string(),
+            Opcode::MUL => "MUL".to_string(),
+            Opcode::DIV => "DIV".to_string(),
+            Opcode::REM => "REM".to_string(),
+            Opcode::POW => "POW".to_string(),
+            Opcode::NEG => "NEG".to_string(),
+
+            // Logical operations
+            Opcode::AND => "AND".to_string(),
+            Opcode::OR => "OR".to_string(),
+            Opcode::XOR => "XOR".to_string(),
+            Opcode::NOT => "NOT".to_string(),
+
+            // Bitwise shift operations
+            Opcode::SLA => "SLA".to_string(),
+            Opcode::SRA => "SRA".to_string(),
+
+            // Comparison operations
+            Opcode::EQ => "EQ".to_string(),
+            Opcode::NE => "NE".to_string(),
+            Opcode::LT => "LT".to_string(),
+            Opcode::GT => "GT".to_string(),
+            Opcode::LE => "LE".to_string(),
+            Opcode::GE => "GE".to_string(),
+
+            // Local variable access
+            Opcode::LOAD_LOCAL => format!("LOAD.LOCAL {}", self.operand),
+            Opcode::STORE_LOCAL => format!("STORE.LOCAL {}", self.operand),
+
+            // Memory access
+            Opcode::LOAD => "LOAD".to_string(),
+            Opcode::STORE => "STORE".to_string(),
+
+            // Control flow
+            Opcode::JMP => format!("JMP 0x{:06x}", self.operand),
+            Opcode::JMPT => format!("JMPT 0x{:06x}", self.operand),
+            Opcode::JMPF => format!("JMPF 0x{:06x}", self.operand),
+            Opcode::CALL => format!("CALL 0x{:06x}", self.operand),
+            Opcode::RET => "RET".to_string(),
+
+            // Miscellaneous
+            Opcode::NOP => "NOP".to_string(),
+            Opcode::HALT => "HALT".to_string(),
+            Opcode::SYSCALL => format!("SYSCALL 0x{:02x}", self.operand),
+        };
+        write!(f, "{}", string)
     }
 }

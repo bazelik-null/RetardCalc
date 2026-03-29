@@ -8,14 +8,29 @@ stack-based virtual machine.
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Stack Model](#stack-model)
-3. [Functions and Calling Convention](#functions-and-calling-convention)
-4. [Instruction Set](#instruction-set)
-5. [Local Variables](#local-variables)
-6. [Data Sections and Globals](#data-sections-and-globals)
-7. [Labels and Jumps](#labels-and-jumps)
-8. [Instruction Encoding](#instruction-encoding)
-9. [Executable Format](#executable-format)
+2. [Garbage Collector](#garbage-collector)
+3. [Stack Model](#stack-model)
+4. [Functions and Calling Convention](#functions-and-calling-convention)
+5. [Instruction Set](#instruction-set)
+6. [Local Variables](#local-variables)
+7. [Data Sections and Globals](#data-sections-and-globals)
+8. [Labels and Jumps](#labels-and-jumps)
+9. [Instruction Encoding](#instruction-encoding)
+10. [Executable Format](#executable-format)
+
+## Garbage Collector
+
+The VM uses a stop-the-world (sounds cool, right?), non-concurrent, tracing garbage collector with a bump allocator +
+free-list for
+reuse. Static allocations are never collected.
+
+### GC triggers
+
+- Allocations increment `allocated_bytes_since_last_gc`.
+- GC runs when:
+    - A requested allocation doesn't fit into the remaining bump region, or
+    - `allocated_bytes_since_last_gc >= gc_threshold` (default is 10% of the heap).
+- After GC, `allocated_bytes_since_last_gc` is reset.
 
 ## Stack Model
 

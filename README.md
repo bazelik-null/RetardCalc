@@ -10,8 +10,9 @@
 
 # Introduction
 
-**Morsel** is an **interpreted** programming language built in **Rust** as my first Rust project. It combines memory and
-type safety of Rust with an easy, expression-based syntax inspired by C, Go, and Rust itself.
+**Morsel** is an **interpreted** programming language built in **Rust** as my first Rust project. It combines memory
+safety of GC languages with type safety of Rust with an easy, expression-based syntax inspired by C, Go, and Rust
+itself.
 
 ## Why Morsel?
 
@@ -55,6 +56,7 @@ Morsel combines some unique features that set it apart from typical interpreted 
 - **Compile-Time Safety Checks** - Semantic analyzer enforces safety rules before code generation, preventing *most*
   runtime errors.
 - **Explicit Control Flow** - No implicit type conversion or hidden control flow. What you write is what executes.
+- **Garbage Collection** - Efficient tracing garbage collector which manages memory and enforces memory safety.
 - **Built in Rust** - Because everything should be. Including programming languages, apparently.
 
 # Installation
@@ -97,9 +99,10 @@ cargo build -r
 - [x] Variables
 - [x] Functions
 - [x] Control flow (if/else statements, loops, etc)
-- [ ] Basic virtual machine
-- [ ] Hard built-in functions (for debug)
-- [ ] Memory management (stack, heap, etc)
+- [x] Basic virtual machine
+- [x] Hard built-in functions (for debug)
+- [x] Memory management (stack, heap, etc)
+- [x] Tracing garbage collector
 - [ ] Arrays and data structures
 - [ ] Imports and namespaces
 - [ ] Built-in std library (print(), input())

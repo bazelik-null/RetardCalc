@@ -4,11 +4,7 @@ mod expressions;
 mod statements;
 pub mod symbol;
 pub mod tree;
-pub mod tree_printer;
 pub mod type_inference;
-//
-// Parser core
-//
 
 use crate::core::compiler::error_handler::CompilerError;
 use crate::core::compiler::parser::analyzer::SemanticAnalyzer;

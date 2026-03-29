@@ -1,6 +1,10 @@
-use crate::core::compiler::parser::Parser;
 use crate::core::compiler::parser::tree::Node;
-use crate::core::compiler::preprocessor::token::{OperatorValue, SyntaxValue, TokenType};
+use crate::core::compiler::parser::Parser;
+use crate::core::compiler::preprocessor::token::{
+    OperatorValue, SyntaxValue, TokenType,
+};
+use crate::core::shared::builtin_func::SysCallId;
+use std::str::FromStr;
 
 impl<'a> Parser<'a> {
     pub fn parse_expression(&mut self, min_bp: u8) -> Result<Node, ()> {
@@ -116,9 +120,23 @@ impl<'a> Parser<'a> {
                     let args = self.parse_arguments()?;
                     self.expect_syntax(SyntaxValue::RParen)?;
 
-                    lhs = Node::FunctionCall {
-                        name: Box::new(lhs),
-                        args,
+                    lhs = match lhs {
+                        // If call target is an identifier and matches a SysCallId, make SysCall node
+                        Node::Identifier(name) => {
+                            if let Ok(id) = SysCallId::from_str(self.rodeo.resolve(&name)) {
+                                Node::SysCall { id, args }
+                            } else {
+                                Node::FunctionCall {
+                                    name: Box::new(Node::Identifier(name)),
+                                    args,
+                                }
+                            }
+                        }
+                        // Otherwise, regular function call with arbitrary expression as name
+                        _ => Node::FunctionCall {
+                            name: Box::new(lhs),
+                            args,
+                        },
                     };
                 }
                 Ok(TokenType::Syntax(SyntaxValue::LBracket)) => {

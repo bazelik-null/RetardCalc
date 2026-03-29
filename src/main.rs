@@ -7,43 +7,47 @@ use crate::core::compiler::preprocessor::lexer::Lexer;
 use crate::core::compiler::source::SourceCode;
 use crate::core::shared::executable::Executable;
 use crate::core::tools::disassembler::Disassembler;
+use crate::core::vm::VirtualMachine;
 use colored::Colorize;
 use lasso::Rodeo;
 use std::time::Instant;
 use std::{env, fs, io, path::Path, process};
 
+const EXE_EXTENSION: &str = "msle";
+const SOURCE_EXTENSION: &str = "msl";
+const HEAP_SIZE: usize = 8000000; // 8MB
+
 #[derive(Debug)]
 enum Command {
     Build(String),
     Disassemble(String),
-    Run(String),
+    Run(String, bool),
+    BuildAndRun(String, bool),
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    match parse_command(&args) {
-        Ok(command) => match command {
-            Command::Build(path) => {
-                if let Err(err) = handle_build(&path) {
-                    eprintln!("{}", format!("[ERROR]: {}", err).red());
-                    process::exit(1);
-                }
-            }
-            Command::Disassemble(path) => {
-                if let Err(err) = handle_disassemble(&path) {
-                    eprintln!("{}", format!("[ERROR]: {}", err).red());
-                    process::exit(1);
-                }
-            }
-            Command::Run(_path) => {
-                todo!()
-            }
-        },
-        Err(err) => {
-            eprintln!("{}", err.red());
-            print_usage();
-            process::exit(1);
+    if let Err(err) = execute_command(&args) {
+        eprintln!("{}", format!("[ERROR]: {}", err).red());
+        process::exit(1);
+    }
+}
+
+fn execute_command(args: &[String]) -> Result<(), String> {
+    let command = parse_command(args).inspect_err(|_| {
+        print_usage();
+    })?;
+
+    match command {
+        Command::Build(path) => handle_build(&path).map_err(|e| e.to_string()),
+        Command::Disassemble(path) => handle_disassemble(&path).map_err(|e| e.to_string()),
+        Command::Run(path, debug) => handle_run(&path, debug).map_err(|e| e.to_string()),
+        Command::BuildAndRun(mut path, debug) => {
+            handle_build(&path).map_err(|e| e.to_string())?;
+            path += "e"; // Add e to extension
+            println!(); // Print newline
+            handle_run(&path, debug).map_err(|e| e.to_string())
         }
     }
 }
@@ -57,22 +61,47 @@ fn parse_command(args: &[String]) -> Result<Command, String> {
 
     match command.as_str() {
         "build" => {
-            if args.len() < 3 {
-                return Err("'build' requires a path argument".to_string());
-            }
-            Ok(Command::Build(args[2].clone()))
+            let path = args
+                .get(2)
+                .ok_or_else(|| format!("'{}' requires a path argument", command))?;
+            Ok(Command::Build(path.clone()))
         }
         "disassemble" => {
-            if args.len() < 3 {
-                return Err("'disassemble' requires a path argument".to_string());
-            }
-            Ok(Command::Disassemble(args[2].clone()))
+            let path = args
+                .get(2)
+                .ok_or_else(|| format!("'{}' requires a path argument", command))?;
+            Ok(Command::Disassemble(path.clone()))
         }
         "run" => {
             if args.len() < 3 {
-                return Err("'run' requires a path argument".to_string());
+                return Err(format!("'{}' requires a path argument", command));
             }
-            Ok(Command::Run(args[2].clone()))
+
+            let mut build = false;
+            let mut debug = false;
+            let mut path_opt: Option<String> = None;
+
+            for token in args.iter().skip(2) {
+                match token.as_str() {
+                    "--build" => build = true,
+                    "--debug" => debug = true,
+                    other => {
+                        if path_opt.is_none() {
+                            path_opt = Some(other.to_string());
+                        } else {
+                            return Err(format!("Unexpected argument '{}'", other));
+                        }
+                    }
+                }
+            }
+
+            let path = path_opt.ok_or_else(|| format!("'{}' requires a path argument", command))?;
+
+            if build {
+                Ok(Command::BuildAndRun(path, debug))
+            } else {
+                Ok(Command::Run(path, debug))
+            }
         }
         _ => Err(format!("unknown command: '{}'", command)),
     }
@@ -80,12 +109,21 @@ fn parse_command(args: &[String]) -> Result<Command, String> {
 
 fn print_usage() {
     println!("{}", "USAGE:".cyan().bold());
-    println!("    morsel <COMMAND> <PATH>");
+    println!("    morsel <COMMAND> <ARG> <PATH>");
     println!();
     println!("{}", "COMMANDS:".cyan().bold());
-    println!("    build <PATH>       Build a .msl file to .msle executable");
-    println!("    disassemble <PATH> Disassemble a .msle executable");
-    println!("    run <PATH>         Execute a .msle file");
+    println!(
+        "    build <PATH>                     Build a .{} file to .{} executable",
+        SOURCE_EXTENSION, EXE_EXTENSION
+    );
+    println!(
+        "    disassemble <PATH>               Disassemble a .{} executable",
+        EXE_EXTENSION
+    );
+    println!(
+        "    run <--build> <--debug> <PATH>   Execute a .{} file (and build if specified)",
+        EXE_EXTENSION
+    );
 }
 
 fn get_output_path(input_path: &str, extension: &str) -> String {
@@ -98,14 +136,43 @@ fn get_output_path(input_path: &str, extension: &str) -> String {
         .to_string()
 }
 
-fn handle_build(file_path: &str) -> io::Result<()> {
-    // Validate input file extension
-    if !file_path.ends_with(".msl") {
+fn validate_extension(file_path: &str, expected: &str) -> io::Result<()> {
+    if !file_path.ends_with(&format!(".{}", expected)) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "Input file must have .msl extension",
+            format!("Input file must have .{} extension", expected),
         ));
     }
+    Ok(())
+}
+
+fn read_and_deserialize_executable(file_path: &str) -> io::Result<Executable> {
+    validate_extension(file_path, EXE_EXTENSION)?;
+    let bytes = fs::read(file_path)?;
+    Executable::deserialize(&bytes).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
+}
+
+fn time_phase<F, T>(phase_name: &str, f: F) -> T
+where
+    F: FnOnce() -> T,
+{
+    let start = Instant::now();
+    let result = f();
+    let duration = start.elapsed();
+    println!(
+        "{}",
+        format!(
+            "[INFO]: {} complete. ({:.2}ms)",
+            phase_name,
+            duration.as_secs_f64() * 1000.0
+        )
+        .green()
+    );
+    result
+}
+
+fn handle_build(file_path: &str) -> io::Result<()> {
+    validate_extension(file_path, SOURCE_EXTENSION)?;
 
     let input = fs::read_to_string(file_path)?;
     let mut rodeo = Rodeo::new();
@@ -113,8 +180,7 @@ fn handle_build(file_path: &str) -> io::Result<()> {
 
     match build(&mut rodeo, &source) {
         Ok(executable) => {
-            // Save executable to .msle file
-            let output_path = get_output_path(file_path, "msle");
+            let output_path = get_output_path(file_path, EXE_EXTENSION);
             let serialized = executable.serialize();
             fs::write(&output_path, serialized)?;
 
@@ -128,101 +194,93 @@ fn handle_build(file_path: &str) -> io::Result<()> {
             for error in errors {
                 eprintln!("{}", error);
             }
-            process::exit(1);
+            Err(io::Error::other("Compilation failed"))
         }
     }
 }
 
 fn handle_disassemble(file_path: &str) -> io::Result<()> {
-    // Support .msle files
-    if file_path.ends_with(".msle") {
-        let bytes = fs::read(file_path)?;
-        // Try to deserialize as executable
-        match Executable::deserialize(&bytes) {
-            Ok(exe) => {
-                let disassembly = Disassembler::disassemble(&exe);
-                println!("{}", disassembly);
-                Ok(())
-            }
-            Err(err) => Err(io::Error::new(io::ErrorKind::InvalidData, err)),
+    let exe = read_and_deserialize_executable(file_path)?;
+    let disassembly = Disassembler::disassemble(&exe);
+    println!("{}", disassembly);
+    Ok(())
+}
+
+fn handle_run(file_path: &str, debug: bool) -> io::Result<()> {
+    let exe = read_and_deserialize_executable(file_path)?;
+    run(exe, debug).map_err(io::Error::other)
+}
+
+fn run(executable: Executable, debug: bool) -> Result<(), String> {
+    // Load VM and executable
+    let mut virtual_machine = VirtualMachine::new(HEAP_SIZE);
+    virtual_machine
+        .load_executable(&executable)
+        .map_err(|err| err.to_string())?;
+
+    // Execute program
+    match debug {
+        true => {
+            println!("{}", "[INFO]: Running in debug mode.".to_string().cyan());
+            virtual_machine.run_debug().map_err(|err| err.to_string())?;
         }
-    } else {
-        Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Input file must have .msle extension",
-        ))
+        false => {
+            virtual_machine.run().map_err(|err| err.to_string())?;
+        }
     }
+
+    Ok(())
 }
 
 fn build(rodeo: &mut Rodeo, source: &SourceCode) -> Result<Executable, Vec<CompilerError>> {
     let build_start = Instant::now();
 
     // Lexing phase
-    let lexing_start = Instant::now();
-    let lexer = Lexer::new(rodeo, source);
-    let lexer_output = lexer.scan();
+    let lexer_output = time_phase("Lexing", || {
+        let lexer = Lexer::new(rodeo, source);
+        lexer.scan()
+    });
 
     if !lexer_output.errors.is_empty() {
         return Err(lexer_output.errors);
     }
-    let lexing_duration = lexing_start.elapsed();
-    println!(
-        "{}",
-        format!(
-            "[INFO]: Lexing complete. ({:.2}ms)",
-            lexing_duration.as_secs_f64() * 1000.0
-        )
-        .green()
-    );
 
     // Parsing phase
-    let parsing_start = Instant::now();
-    let parser = Parser::new(lexer_output, source, rodeo);
-    let parser_output = parser.parse();
+    let parser_output = time_phase("Parsing", || {
+        let parser = Parser::new(lexer_output, source, rodeo);
+        parser.parse()
+    });
 
     if !parser_output.errors.is_empty() {
         return Err(parser_output.errors);
     }
-    let parsing_duration = parsing_start.elapsed();
+
+    // Code generation phase
+    let exe = time_phase("Code generation", || {
+        let compiler = CodeGenerator::new(rodeo);
+        compiler.compile(&parser_output.nodes)
+    })
+    .map_err(|e| {
+        vec![string_to_compiler_error(
+            e,
+            "Code generator",
+            source.filename.clone(),
+        )]
+    })?;
+
+    let total_duration = build_start.elapsed();
     println!(
         "{}",
         format!(
-            "[INFO]: Parsing complete. ({:.2}ms)",
-            parsing_duration.as_secs_f64() * 1000.0
+            "[INFO]: Total build time: {:.2}ms",
+            total_duration.as_secs_f64() * 1000.0
         )
         .green()
     );
 
-    // Code generation phase
-    let codegen_start = Instant::now();
-    let compiler = CodeGenerator::new(rodeo);
-    match compiler.compile(&parser_output.nodes) {
-        Ok(exe) => {
-            let codegen_duration = codegen_start.elapsed();
-            println!(
-                "{}",
-                format!(
-                    "[INFO]: Compilation complete. ({:.2}ms)",
-                    codegen_duration.as_secs_f64() * 1000.0
-                )
-                .green()
-            );
+    Ok(exe)
+}
 
-            let total_duration = build_start.elapsed();
-            println!(
-                "{}",
-                format!(
-                    "[INFO]: Total build time: {:.2}ms",
-                    total_duration.as_secs_f64() * 1000.0
-                )
-                .green()
-            );
-
-            Ok(exe)
-        }
-        Err(error) => {
-            eprintln!("{}", error);
-            Err(vec![])
-        }
-    }
+fn string_to_compiler_error(err: String, from: &str, filename: String) -> CompilerError {
+    CompilerError::new(err, from.to_string(), 0, 0, 0, None, Some(filename))
 }

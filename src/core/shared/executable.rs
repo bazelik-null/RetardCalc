@@ -9,12 +9,12 @@ const VERSION: u16 = 0;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Header {
-    magic_number: [u8; 4],
-    version_number: u16,
-    instructions_size: u32,
-    data_offset: u32,
-    data_size: u32,
-    entry_point: u32,
+    pub magic_number: [u8; 4],
+    pub version_number: u16,
+    pub instructions_size: u32,
+    pub data_offset: u32,
+    pub data_size: u32,
+    pub entry_point: u32,
 }
 
 impl Header {
@@ -48,30 +48,6 @@ impl Executable {
             instructions,
             data,
         }
-    }
-
-    pub fn instruction_count(&self) -> usize {
-        self.instructions.len()
-    }
-
-    pub fn get_instruction(&self, offset: usize) -> Option<Instruction> {
-        self.instructions.get(offset).copied()
-    }
-
-    pub fn instructions(&self) -> &[Instruction] {
-        &self.instructions
-    }
-
-    pub fn data(&self) -> &[u8] {
-        &self.data
-    }
-
-    pub fn data_size(&self) -> usize {
-        self.data.len()
-    }
-
-    pub fn entry_point(&self) -> usize {
-        self.header.entry_point as usize
     }
 
     /// Serialize to binary format.

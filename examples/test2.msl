@@ -1,22 +1,12 @@
 // Test file
 
 func main() {
-    let x = 5;
-
-    let message = is_positive(x);
-    print(message);
+    let message1 = input("First message: ");
+    echo(message1);
+    let message2 = input("Second message: ");
+    echo(message2);
 }
 
-func print(message: string) {
-    // Placeholder
-}
-
-func is_positive(x: int): string {
-    let message = if (x > 0) {
-        "positive"
-    } else {
-        "non-positive"
-    }
-
-    message
+func echo(msg: string) {
+    print("Echo: " + msg)
 }

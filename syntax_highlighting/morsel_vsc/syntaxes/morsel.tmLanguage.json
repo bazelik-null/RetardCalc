@@ -93,7 +93,7 @@
       "patterns": [
         {
           "name": "storage.type.morsel",
-          "match": "\\b(int|float|string|bool|null|any)\\b"
+          "match": "\\b(int|float|string|bool|void|ref)\\b"
         }
       ]
     },

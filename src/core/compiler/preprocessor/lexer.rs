@@ -245,6 +245,7 @@ impl<'a> Lexer<'a> {
             "float" => Some(KeywordValue::Float),
             "bool" => Some(KeywordValue::Boolean),
             "string" => Some(KeywordValue::String),
+            "ref" => Some(KeywordValue::Reference),
             "return" => Some(KeywordValue::Return),
             _ => None,
         }

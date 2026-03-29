@@ -1,7 +1,7 @@
 pub mod generator;
 
 use crate::core::compiler::linker::Linker;
-use crate::core::compiler::parser::tree::Node;
+use crate::core::compiler::parser::tree::{Node, Type};
 use crate::core::shared::bytecode::Opcode::*;
 use crate::core::shared::bytecode::{Instruction, Opcode, Operand};
 use crate::core::shared::executable::Executable;
@@ -9,7 +9,7 @@ use lasso::{Rodeo, Spur};
 use std::collections::HashMap;
 
 pub struct Scope {
-    variables: HashMap<Spur, Operand>,
+    variables: HashMap<Spur, (Operand, Type)>,
     parent: Option<Box<Scope>>,
     next_local_id: Operand,
 }
@@ -37,18 +37,18 @@ impl Scope {
         }
     }
 
-    pub fn declare(&mut self, name: Spur, local_id: Operand) -> Result<(), String> {
+    pub fn declare(&mut self, name: Spur, local_id: Operand, var_type: Type) -> Result<(), String> {
         if self.variables.contains_key(&name) {
             return Err("Variable already declared in this scope".to_string());
         }
-        self.variables.insert(name, local_id);
+        self.variables.insert(name, (local_id, var_type));
         Ok(())
     }
 
-    pub fn lookup(&self, name: Spur) -> Option<Operand> {
+    pub fn lookup(&self, name: Spur) -> Option<(Operand, Type)> {
         self.variables
             .get(&name)
-            .copied()
+            .cloned()
             .or_else(|| self.parent.as_ref().and_then(|p| p.lookup(name)))
     }
 
@@ -56,6 +56,10 @@ impl Scope {
         let id = self.next_local_id;
         self.next_local_id += 1;
         id
+    }
+
+    pub fn get_type(&self, id: Spur) -> Option<Type> {
+        self.lookup(id).map(|(_, var_type)| var_type)
     }
 }
 
@@ -115,9 +119,6 @@ impl<'a> CodeGenerator<'a> {
             self.generate_node(n)?;
         }
 
-        // Push final HALT instruction
-        self.emit(HALT, 0);
-
         // Create linker with all instructions
         let mut linker = Linker::new(self.instructions);
 
@@ -137,7 +138,7 @@ impl<'a> CodeGenerator<'a> {
         }
 
         // Link and produce executable
-        let executable = linker.link(entry_point)?;
+        let executable = linker.link(entry_point.0)?;
 
         Ok(executable)
     }
@@ -145,31 +146,51 @@ impl<'a> CodeGenerator<'a> {
     /// Scan all nodes and collect function declarations
     fn collect_functions(&mut self, nodes: &[Node]) -> Result<(), String> {
         for node in nodes {
-            if let Node::FunctionDecl { name, .. } = node {
+            if let Node::FunctionDecl {
+                name, return_type, ..
+            } = node
+            {
                 let label = self.allocate_label_id();
+                let return_type = return_type.clone().unwrap_or(Type::Void);
+
                 self.functions.insert(*name, FunctionMetadata { label });
                 // Declare the function in the global scope
-                self.scope.declare(*name, label)?;
+                self.scope.declare(*name, label, return_type)?;
             }
         }
         Ok(())
     }
 
     /// Allocate data and request relocation for the next instruction.
-    fn insert_data<T: AsRef<[u8]>>(&mut self, value: T) -> Result<(), String> {
+    /// Layout: `[rtti_len (1 byte) | rtti_bytes | data_len (4 bytes) | data_bytes]`
+    fn insert_data<T: AsRef<[u8]>>(&mut self, value: T, rtti: Type) -> Result<(), String> {
         let bytes = value.as_ref();
+        let rtti_bytes = rtti.to_bytes();
 
         // Allocate a data ID
         let data_id = self.allocate_data_id();
 
         // Emit instruction that will reference this data
-        self.emit(PUSH, data_id);
+        self.emit(PUSH_HEAP_REF, data_id);
 
         // Record the instruction offset
         let instruction_offset = self.instructions.len() - 1;
 
+        // Build the complete data block with header
+        let mut data_block = Vec::new();
+
+        // Construct header
+        let rtti_len = rtti_bytes.len() as u8;
+        let data_len = bytes.len() as u32;
+        data_block.push(rtti_len);
+        data_block.extend_from_slice(&rtti_bytes);
+        data_block.extend_from_slice(&data_len.to_le_bytes());
+        data_block.extend_from_slice(bytes);
+
+        // Push data
+        self.pending_data.push((data_id, data_block));
+
         // Request relocation from the linker
-        self.pending_data.push((data_id, bytes.to_vec()));
         self.pending_relocations
             .push((instruction_offset, data_id, 0));
 

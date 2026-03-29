@@ -1,16 +1,23 @@
-// Test file
 
-func divide(args: [float: 2]): float {
-    if (args[0] == 0.0 || args[1] == 0.0) {
-        return 0;
+func float_workload() {
+    let mut x: float = 1.0001;
+    let mut i: int = 0;
+    while (i < 100) {
+        x = x * 1.0000001 + (1.0 / (x + 1.0));
+        let mut y: float = x;
+        let mut k: int = 0;
+        while (k < 2) {
+            y = 0.5 * (y + (2.0 / y));
+            k = k + 1;
+        }
+        x = x + (y * 0.000001);
+        i = i + 1;
     }
-
-    args[0] / args[1]
+    if (x < 0.0) {
+        println("neg");
+    }
 }
 
 func main() {
-    let mut args: [float: 2] = [0.0, 1.0];
-    let mut result = 0.0;
-
-    result = divide(args);
+    float_workload();
 }

@@ -82,6 +82,7 @@ impl<'a> SemanticAnalyzer<'a> {
             Node::Block(nodes) => self.analyze_block(nodes),
             Node::FunctionDecl { .. } => self.analyze_func_decl(node),
             Node::FunctionCall { .. } => self.analyze_func_call(node),
+            Node::SysCall { .. } => self.analyze_syscall(node),
             Node::Return(val) => self.analyze_return(val),
             Node::ArrayLiteral(elements) => self.analyze_array_literal(elements),
             Node::ArrayAccess { array, index } => self.analyze_array_access(array, index),
@@ -517,6 +518,17 @@ impl<'a> SemanticAnalyzer<'a> {
 
         // Return function's return type
         Ok(return_type.unwrap_or(Type::Void))
+    }
+
+    // todo: proper syscalls
+    fn analyze_syscall(&mut self, node: &mut Node) -> Result<Type, ()> {
+        let (id, _args) = match node {
+            Node::SysCall { id, args } => (id, args),
+            _ => return Err(()),
+        };
+
+        // Return function's return type
+        Ok(id.get_return_type())
     }
 
     fn analyze_return(&mut self, value: &mut Option<Box<Node>>) -> Result<Type, ()> {

@@ -1,6 +1,7 @@
 use crate::core::compiler::codegen::{CodeGenerator, Scope};
-use crate::core::compiler::parser::tree::{Node, Parameter};
+use crate::core::compiler::parser::tree::{Node, Parameter, Type};
 use crate::core::compiler::preprocessor::token::{LiteralValue, OperatorValue};
+use crate::core::shared::builtin_func::SysCallId;
 use crate::core::shared::bytecode::Opcode::*;
 use lasso::Spur;
 
@@ -12,7 +13,7 @@ impl<'a> CodeGenerator<'a> {
             Node::Identifier(value) => self.gen_identifier(*value),
             Node::Unary { rhs, op } => {
                 self.generate_node(rhs.as_ref())?;
-                self.gen_op(*op);
+                self.gen_unary_op(*op);
                 Ok(())
             }
             Node::Binary { lhs, rhs, op } => {
@@ -30,11 +31,21 @@ impl<'a> CodeGenerator<'a> {
                 else_branch,
             } => self.gen_if(condition, then_branch, else_branch),
             Node::While { condition, body } => self.gen_while(condition, body),
-            Node::VariableDecl { name, value, .. } => self.gen_variable_decl(*name, value),
+            Node::VariableDecl {
+                name,
+                type_annotation,
+                value,
+                ..
+            } => self.gen_variable_decl(
+                *name,
+                type_annotation.as_ref().unwrap_or(&Type::Void).clone(),
+                value,
+            ),
             Node::FunctionDecl {
                 name, params, body, ..
             } => self.gen_function_decl(*name, params, body),
             Node::FunctionCall { name, args } => self.gen_function_call(name, args),
+            Node::SysCall { id, args } => self.gen_syscall(*id, args),
             Node::ArrayAccess { .. } => Err("Unimplemented".to_string()),
             Node::Return(value) => self.gen_return(value),
         }
@@ -44,22 +55,22 @@ impl<'a> CodeGenerator<'a> {
         match value {
             // Push to stack as immediate
             LiteralValue::Integer(value) => {
-                self.emit(PUSH, *value);
-            }
-            // Push to stack as immediate. For now store as int
-            LiteralValue::Float(value) => {
-                let value = *value as i32;
-                self.emit(PUSH, value);
+                self.emit(PUSH_IMM, *value);
             }
             // Push to stack as immediate
             LiteralValue::Boolean(value) => {
                 let value = *value as i32;
-                self.emit(PUSH, value)
+                self.emit(PUSH_IMM, value)
             }
-            // Push to data section
+
+            // Push to data section as reference
+            LiteralValue::Float(value) => {
+                self.insert_data(value.to_le_bytes(), Type::Float)?;
+            }
+            // Push to data section as reference
             LiteralValue::String(value) => {
                 let value = self.rodeo.resolve(value);
-                self.insert_data(value)?;
+                self.insert_data(value, Type::String)?;
             }
         }
         Ok(())
@@ -71,7 +82,8 @@ impl<'a> CodeGenerator<'a> {
             .lookup(name)
             .ok_or_else(|| "Undefined variable".to_string())?;
 
-        self.emit(LOAD_LOCAL, local_id);
+        self.emit(LOAD_LOCAL, local_id.0);
+
         Ok(())
     }
 
@@ -79,7 +91,6 @@ impl<'a> CodeGenerator<'a> {
         // Generate argument
         self.generate_node(value)?;
 
-        // Handle different assignment targets
         match target {
             Node::Identifier(name) => {
                 let local_id = self
@@ -87,8 +98,9 @@ impl<'a> CodeGenerator<'a> {
                     .lookup(*name)
                     .ok_or_else(|| "Undefined variable".to_string())?;
 
-                self.emit(STORE_LOCAL, local_id);
+                self.emit(STORE_LOCAL, local_id.0);
             }
+
             Node::ArrayAccess { .. } => {
                 // TODO: Implement array element assignment
                 todo!();
@@ -101,9 +113,15 @@ impl<'a> CodeGenerator<'a> {
         Ok(())
     }
 
-    fn gen_variable_decl(&mut self, name: Spur, value: &Node) -> Result<(), String> {
+    fn gen_variable_decl(
+        &mut self,
+        name: Spur,
+        var_type: Type,
+        value: &Node,
+    ) -> Result<(), String> {
         let local_id = self.scope.allocate_local_id();
-        self.scope.declare(name, local_id)?;
+
+        self.scope.declare(name, local_id, var_type)?;
 
         self.generate_node(value)?;
         self.emit(STORE_LOCAL, local_id);
@@ -204,11 +222,17 @@ impl<'a> CodeGenerator<'a> {
         // Declare parameters as local variables
         for (idx, param) in params.iter().enumerate() {
             let local_id = idx as i32;
-            self.scope.declare(param.name, local_id)?;
+            self.scope
+                .declare(param.name, local_id, param.type_annotation.clone())?;
         }
 
         // Update next_local_id to account for parameters
         self.scope.next_local_id = params.len() as i32;
+
+        // Pop arguments from stack into local variables
+        for idx in (0..params.len()).rev() {
+            self.emit(STORE_LOCAL, idx as i32);
+        }
 
         // Generate function body
         self.generate_node(body)?;
@@ -248,8 +272,23 @@ impl<'a> CodeGenerator<'a> {
 
         // Emit call instruction with the function label
         let call_offset = self.instructions.len();
-        self.emit(CALL, func_label);
-        self.request_branch_relocation(call_offset, func_label)?;
+        self.emit(CALL, func_label.0);
+        self.request_branch_relocation(call_offset, func_label.0)?;
+
+        Ok(())
+    }
+
+    fn gen_syscall(&mut self, id: SysCallId, args: &[Node]) -> Result<(), String> {
+        // Generate arguments in order (they'll be pushed onto the stack)
+        for arg in args {
+            self.generate_node(arg)?;
+        }
+
+        // Push args count
+        self.emit(PUSH_IMM, args.len() as i32);
+
+        // Emit syscall instruction with syscall id
+        self.emit(SYSCALL, id as i32);
 
         Ok(())
     }
@@ -260,7 +299,7 @@ impl<'a> CodeGenerator<'a> {
             self.generate_node(val)?;
         } else {
             // Push 0 as default return value
-            self.emit(PUSH, 0);
+            self.emit(PUSH_IMM, 0);
         }
 
         // Emit return instruction
@@ -294,6 +333,12 @@ impl<'a> CodeGenerator<'a> {
             OperatorValue::LessEqual => self.emit(LE, 0),
             OperatorValue::And => self.emit(AND, 0),
             OperatorValue::Or => self.emit(OR, 0),
+        }
+    }
+
+    fn gen_unary_op(&mut self, op: OperatorValue) {
+        if op == OperatorValue::Minus {
+            self.emit(NEG, 0)
         }
     }
 }

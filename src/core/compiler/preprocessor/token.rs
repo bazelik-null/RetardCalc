@@ -107,10 +107,11 @@ pub enum KeywordValue {
     While, // while
     For,   // for
     // Types
-    Integer,
-    Float,
-    Boolean,
-    String,
+    Integer,   // int
+    Float,     // float
+    Boolean,   // bool
+    String,    // string
+    Reference, // ref
 }
 
 impl Token {

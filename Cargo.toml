@@ -3,6 +3,18 @@ name = "morsel"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "morsel"
+path = "src/bin/morsel.rs"
+
+[[bin]]
+name = "morsel-vm"
+path = "src/bin/morsel_vm.rs"
+
+[lib]
+name = "morsel_core"
+path = "src/lib.rs"
+
 [dependencies]
 lasso = "0.7.3"
 colored = "3.1.1"

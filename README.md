@@ -30,11 +30,16 @@ Documentation for different aspects of Morsel:
 
 # Quick Start
 
+Write a simple hello world (Morsel is entire world if you didn't know).
+
+1. Declare main() function (entry point)
+2. Use built-in println() and print "Hello, Morsel!"
+
 ### Hello world
 
 ```morsel
 func main() {
-    println("Hello, Morsel!");
+    println("Hello, Morsel!")
 }
 ```
 
@@ -45,10 +50,24 @@ morsel build hello.msl
 morsel run hello.msle
 ```
 
+### Packed executables
+
+Let's pack our hello world to stand-alone executable with embedded VM!
+
+```bash
+morsel pack hello.msle hello.exe
+./hello.exe
+```
+
+Now end-user don't have to install morsel, it's embedded into binary! (Also, VM and bytecode is lightweight on C and
+Rust level)
+
 # Features
 
 Morsel combines some unique features that set it apart from typical interpreted languages:
 
+- **Lightweight** - Entire toolchain and produced binaries are incredibly lightweight!
+- **Standalone Executables** - Morsel has packer which can pack **msle** to normal **exe** or any other executables.
 - **Static Type System with Inference** - Catch type errors before execution while using automatic
   type inference (no need for verbose type annotations everywhere!).
 - **Immutability by Default** - Variables are immutable unless explicitly marked with `mut`.
@@ -83,6 +102,11 @@ cargo build -r
         - **`./parser/analyzer.rs`** - Analyzes AST and enforces safety rules
     - **`./codegen`** - Generates bytecode from AST
     - **`./linker`** - Resolves label and data IDs, patches instructions
+- **`./shared`** - Self-explanatory
+- **`./tools`** - Useful tools
+- **`./vm`** - Morsel Virtual Machine
+    - **`mod.rs`** - Main virtual machine dispatch
+    - **`memory.rs`** - Memory manager and Garbage Collector
 
 # Roadmap
 

@@ -1,3 +1,4 @@
+#![allow(clippy::should_implement_trait)]
 use std::cmp::Ordering;
 use std::fmt::Display;
 
@@ -57,9 +58,7 @@ impl Ord for Number {
             // Int vs Float: convert int to float and compare
             (Number::Int(a), Number::Float(b)) => {
                 let a_float = *a as f32;
-                if b.is_nan() {
-                    Ordering::Less
-                } else if a_float < *b {
+                if a_float < *b || b.is_nan() {
                     Ordering::Less
                 } else if a_float > *b {
                     Ordering::Greater

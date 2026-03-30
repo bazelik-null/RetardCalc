@@ -1,15 +1,14 @@
-pub mod core;
-
-use crate::core::compiler::codegen::CodeGenerator;
-use crate::core::compiler::error_handler::CompilerError;
-use crate::core::compiler::parser::Parser;
-use crate::core::compiler::preprocessor::lexer::Lexer;
-use crate::core::compiler::source::SourceCode;
-use crate::core::shared::executable::Executable;
-use crate::core::tools::disassembler::Disassembler;
-use crate::core::vm::VirtualMachine;
 use colored::Colorize;
 use lasso::Rodeo;
+use morsel_core::core::compiler::codegen::CodeGenerator;
+use morsel_core::core::compiler::error_handler::CompilerError;
+use morsel_core::core::compiler::parser::Parser;
+use morsel_core::core::compiler::preprocessor::lexer::Lexer;
+use morsel_core::core::compiler::source::SourceCode;
+use morsel_core::core::shared::executable::Executable;
+use morsel_core::core::tools::disassembler::Disassembler;
+use morsel_core::core::tools::packer::Packer;
+use morsel_core::core::vm::VirtualMachine;
 use std::time::Instant;
 use std::{env, fs, io, path::Path, process};
 
@@ -19,10 +18,12 @@ const HEAP_SIZE: usize = 8000000; // 8MB
 
 #[derive(Debug)]
 enum Command {
-    Build(String),
+    Build(String, String), // source_path, output_path
+    Pack(String, String),  // source_path, output_path
     Disassemble(String),
-    Run(String, bool, bool),         // path, debug, time
-    BuildAndRun(String, bool, bool), // path, debug, time
+    Run(String, bool, bool),                 // path, debug, time
+    BuildAndRun(String, String, bool, bool), // source_path, output_path, debug, time
+    BuildAndPack(String, String),            // source_path, output_path
 }
 
 fn main() {
@@ -40,16 +41,26 @@ fn execute_command(args: &[String]) -> Result<(), String> {
     })?;
 
     match command {
-        Command::Build(path) => handle_build(&path).map_err(|e| e.to_string()),
+        Command::Build(path, output) => handle_build(&path, &output).map_err(|e| e.to_string()),
+        Command::Pack(source_path, output_path) => {
+            pack(&source_path, &output_path).map_err(|e| e.to_string())
+        }
+        Command::BuildAndPack(source_path, output_path) => {
+            handle_build_and_pack(&source_path, &output_path).map_err(|e| e.to_string())
+        }
         Command::Disassemble(path) => handle_disassemble(&path).map_err(|e| e.to_string()),
         Command::Run(path, debug, time) => {
             handle_run(&path, debug, time).map_err(|e| e.to_string())
         }
-        Command::BuildAndRun(mut path, debug, time) => {
-            handle_build(&path).map_err(|e| e.to_string())?;
-            path += "e"; // Add e to extension
+        Command::BuildAndRun(path, output, debug, time) => {
+            handle_build(&path, &output).map_err(|e| e.to_string())?;
+            let exe_path = if output.is_empty() {
+                get_output_path(&path, EXE_EXTENSION)
+            } else {
+                output
+            };
             println!(); // Print newline
-            handle_run(&path, debug, time).map_err(|e| e.to_string())
+            handle_run(&exe_path, debug, time).map_err(|e| e.to_string())
         }
     }
 }
@@ -63,10 +74,37 @@ fn parse_command(args: &[String]) -> Result<Command, String> {
 
     match command.as_str() {
         "build" => {
-            let path = args
-                .get(2)
-                .ok_or_else(|| format!("'{}' requires a path argument", command))?;
-            Ok(Command::Build(path.clone()))
+            if args.len() < 3 {
+                return Err("'build' requires source path".to_string());
+            }
+
+            let source_path = args[2].clone();
+            let output_path = if args.len() > 3 {
+                args[3].clone()
+            } else {
+                String::new() // Empty string signals to use default
+            };
+
+            let mut pack = false;
+            for token in args.iter().skip(4) {
+                if token.as_str() == "--pack" {
+                    pack = true
+                }
+            }
+
+            if pack {
+                Ok(Command::BuildAndPack(source_path, output_path))
+            } else {
+                Ok(Command::Build(source_path, output_path))
+            }
+        }
+        "pack" => {
+            if args.len() < 4 {
+                return Err("'pack' requires source and output paths".to_string());
+            }
+            let source_path = args[2].clone();
+            let output_path = args[3].clone();
+            Ok(Command::Pack(source_path, output_path))
         }
         "disassemble" => {
             let path = args
@@ -83,26 +121,32 @@ fn parse_command(args: &[String]) -> Result<Command, String> {
             let mut debug = false;
             let mut time = false;
             let mut path_opt: Option<String> = None;
+            let mut output_opt: Option<String> = None;
 
-            for token in args.iter().skip(2) {
-                match token.as_str() {
+            let mut i = 2;
+            while i < args.len() {
+                match args[i].as_str() {
                     "--build" => build = true,
                     "--debug" => debug = true,
                     "--time" => time = true,
                     other => {
                         if path_opt.is_none() {
                             path_opt = Some(other.to_string());
+                        } else if output_opt.is_none() && build {
+                            output_opt = Some(other.to_string());
                         } else {
                             return Err(format!("Unexpected argument '{}'", other));
                         }
                     }
                 }
+                i += 1;
             }
 
             let path = path_opt.ok_or_else(|| format!("'{}' requires a path argument", command))?;
+            let output = output_opt.unwrap_or_default();
 
             if build {
-                Ok(Command::BuildAndRun(path, debug, time))
+                Ok(Command::BuildAndRun(path, output, debug, time))
             } else {
                 Ok(Command::Run(path, debug, time))
             }
@@ -113,19 +157,23 @@ fn parse_command(args: &[String]) -> Result<Command, String> {
 
 fn print_usage() {
     println!("{}", "USAGE:".cyan().bold());
-    println!("    morsel <COMMAND> <ARG> <PATH>");
+    println!("    morsel <COMMAND> <ARGS>");
     println!();
     println!("{}", "COMMANDS:".cyan().bold());
     println!(
-        "    build <PATH>                              Build a .{} file to .{} executable",
+        "    build <--pack> <PATH>                     Build a .{} file to .{} executable",
         SOURCE_EXTENSION, EXE_EXTENSION
+    );
+    println!(
+        "    pack <SOURCE> <OUTPUT>                    Build and pack .{} into standalone executable",
+        SOURCE_EXTENSION
     );
     println!(
         "    disassemble <PATH>                        Disassemble a .{} executable",
         EXE_EXTENSION
     );
     println!(
-        "    run <--build> <--debug> <--time> <PATH>   Execute a .{} file (and build if specified)",
+        "    run <--build> <--debug> <--time> <PATH>   Execute a .{} or packed file",
         EXE_EXTENSION
     );
 }
@@ -133,7 +181,7 @@ fn print_usage() {
 fn get_output_path(input_path: &str, extension: &str) -> String {
     let path = Path::new(input_path);
     let stem = path.file_stem().unwrap().to_string_lossy();
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let parent = path.parent().unwrap_or_else(|| Path::new("../.."));
     parent
         .join(format!("{}.{}", stem, extension))
         .to_string_lossy()
@@ -175,7 +223,7 @@ where
     result
 }
 
-fn handle_build(file_path: &str) -> io::Result<()> {
+fn handle_build(file_path: &str, output: &str) -> io::Result<()> {
     validate_extension(file_path, SOURCE_EXTENSION)?;
 
     let input = fs::read_to_string(file_path)?;
@@ -184,7 +232,13 @@ fn handle_build(file_path: &str) -> io::Result<()> {
 
     match build(&mut rodeo, &source) {
         Ok(executable) => {
-            let output_path = get_output_path(file_path, EXE_EXTENSION);
+            // Use provided output path, or generate default if empty
+            let output_path = if output.is_empty() {
+                get_output_path(file_path, EXE_EXTENSION)
+            } else {
+                output.to_string()
+            };
+
             let serialized = executable.serialize();
             fs::write(&output_path, serialized)?;
 
@@ -201,6 +255,55 @@ fn handle_build(file_path: &str) -> io::Result<()> {
             Err(io::Error::other("Compilation failed"))
         }
     }
+}
+
+fn handle_build_and_pack(source_path: &str, output_path: &str) -> io::Result<()> {
+    validate_extension(source_path, SOURCE_EXTENSION)?;
+
+    let input = fs::read_to_string(source_path)?;
+    let mut rodeo = Rodeo::new();
+    let source = SourceCode::new(input.trim().to_string(), source_path.to_string());
+
+    match build(&mut rodeo, &source) {
+        Ok(executable) => {
+            // Pack the bytecode into a standalone executable
+            match Packer::new(executable, output_path.to_string()).pack() {
+                Ok(_) => {
+                    println!(
+                        "{}",
+                        format!("[INFO]: Packed executable saved to {}", output_path).green()
+                    );
+                    Ok(())
+                }
+                Err(e) => {
+                    eprintln!("{}", format!("[ERROR]: Packing failed: {}", e).red());
+                    Err(io::Error::other("Packing failed"))
+                }
+            }
+        }
+        Err(errors) => {
+            for error in errors {
+                eprintln!("{}", error);
+            }
+            Err(io::Error::other("Compilation failed"))
+        }
+    }
+}
+
+fn pack(source_path: &str, output_path: &str) -> io::Result<()> {
+    validate_extension(source_path, EXE_EXTENSION)?;
+
+    let executable = read_and_deserialize_executable(source_path)?;
+
+    let packer = Packer::new(executable, output_path.to_string());
+
+    packer.pack().map_err(io::Error::other)?;
+
+    println!(
+        "{}",
+        format!("[INFO]: Packed executable saved to {}", output_path).green()
+    );
+    Ok(())
 }
 
 fn handle_disassemble(file_path: &str) -> io::Result<()> {

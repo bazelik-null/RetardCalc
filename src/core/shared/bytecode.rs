@@ -190,7 +190,7 @@ impl Display for Instruction {
                 format!("PUSH.FLOAT.IMM {}", Instruction::bitcast_int(self.operand))
             }
             Opcode::PUSH_HEAP_REF => format!("PUSH.HEAP.REF 0x{:06x}", self.operand),
-            Opcode::PUSH_LOCAL_REF => format!("PUSH.LOCAL.REF {}", self.operand),
+            Opcode::PUSH_LOCAL_REF => format!("PUSH.LOCAL.REF 0x{:06x}", self.operand),
             Opcode::POP => "POP".to_string(),
             Opcode::DUP => "DUP".to_string(),
             Opcode::SWAP => "SWAP".to_string(),

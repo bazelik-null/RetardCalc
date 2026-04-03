@@ -8,7 +8,7 @@ name = "morsel"
 path = "src/bin/morsel.rs"
 
 [[bin]]
-name = "morsel-vm"
+name = "morsel_vm"
 path = "src/bin/morsel_vm.rs"
 
 [lib]

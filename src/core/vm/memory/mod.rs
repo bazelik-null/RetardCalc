@@ -281,57 +281,28 @@ impl Memory {
         }
     }
 
-    /// Add freed block to free list with coalescing
+    /// Add freed block to free list
     fn add_to_free_list(&mut self, addr: usize, size: usize) {
-        let mut new_fb = FreeBlock { base: addr, size };
-        let mut i = 0;
-
-        while i < self.free_list.len() {
-            let fb = self.free_list[i];
-
-            // Coalesce: existing block is before new block
-            if fb.base + fb.size == new_fb.base {
-                new_fb.base = fb.base;
-                new_fb.size += fb.size;
-                self.free_list.swap_remove(i);
-                continue;
-            }
-
-            // Coalesce: existing block is after new block
-            if new_fb.base + new_fb.size == fb.base {
-                new_fb.size += fb.size;
-                self.free_list.swap_remove(i);
-                continue;
-            }
-
-            i += 1;
-        }
-
-        self.free_list.push(new_fb);
+        self.free_list.push(FreeBlock { base: addr, size });
     }
 
     /// Load a variable from the heap (RTTI + data)
     pub fn load_from_heap(&self, addr: usize) -> Result<(&[u8], &[u8]), VmError> {
-        self.ensure_in_bounds(addr, 16 + 16 + 4)?;
+        self.ensure_in_bounds(addr, 16)?;
 
         // Read total size from header
         let total_size = self.get_object_size(addr)?;
         self.ensure_in_bounds(addr, total_size)?;
 
-        // Load RTTI
-        let rtti_offset = addr + 16;
-        let rtti = &self.heap[rtti_offset..rtti_offset + 16];
+        // Load RTTI (bytes 4-11)
+        let rtti = &self.heap[addr + 4..addr + 12];
 
-        // Load data len
-        let data_len_offset = rtti_offset + 16;
-        let data_len = u32::from_le_bytes(
-            self.heap[data_len_offset..data_len_offset + 4]
-                .try_into()
-                .unwrap(),
-        ) as usize;
+        // Load data len (bytes 12-15)
+        let data_len =
+            u32::from_le_bytes(self.heap[addr + 12..addr + 16].try_into().unwrap()) as usize;
 
-        // Load data
-        let data_offset = data_len_offset + 4;
+        // Load data (bytes 16+)
+        let data_offset = addr + 16;
         let data = &self.heap[data_offset..data_offset + data_len];
 
         Ok((rtti, data))
@@ -339,9 +310,8 @@ impl Memory {
 
     /// Load a variable RTTI from the heap
     pub fn load_type_from_heap(&self, addr: usize) -> Result<&[u8], VmError> {
-        self.ensure_in_bounds(addr, 16 + 16)?;
-        let rtti_offset = addr + 16;
-        Ok(&self.heap[rtti_offset..rtti_offset + 16])
+        self.ensure_in_bounds(addr, 12)?;
+        Ok(&self.heap[addr + 4..addr + 12])
     }
 
     /// Save a variable to the heap (RTTI + data). Returns address.
@@ -351,35 +321,26 @@ impl Memory {
         data: &[u8],
         is_static: bool,
     ) -> Result<usize, VmError> {
-        if rtti.len() != 16 {
+        if rtti.len() != 8 {
             return Err(VmError::RTTITooLarge(rtti.len()));
         }
 
         // Allocate heap object
-        let total_size = 16 + 16 + 4 + data.len();
+        let total_size = 16 + data.len();
         let addr = self.allocate(total_size, is_static)?;
 
-        // Write header (16 bytes)
-        self.heap[addr..addr + 4].copy_from_slice(&(total_size as u32).to_le_bytes());
-        self.heap[addr + 4..addr + 16].copy_from_slice(&[0u8; 12]); // reserved
+        // Write header
+        self.heap[addr..addr + 4].copy_from_slice(&(total_size as u32).to_le_bytes()); // Size (4 bytes)
+        self.heap[addr + 4..addr + 12].copy_from_slice(rtti); // RTTI (8 bytes)
+        self.heap[addr + 12..addr + 16].copy_from_slice(&(data.len() as u32).to_le_bytes()); // Data length (4 bytes)
 
         // Cache header to avoid redundant reads
         self.header_cache
             .insert(addr, (total_size as u32, is_static));
 
-        // Write RTTI
-        let rtti_offset = addr + 16;
-        self.heap[rtti_offset..rtti_offset + 16].copy_from_slice(rtti);
-
-        // Write data length
-        let data_len_offset = rtti_offset + 16;
-        self.heap[data_len_offset..data_len_offset + 4]
-            .copy_from_slice(&(data.len() as u32).to_le_bytes());
-
-        // Write data
-        let data_offset = data_len_offset + 4;
+        // Write data (bytes 16+)
         if !data.is_empty() {
-            self.heap[data_offset..data_offset + data.len()].copy_from_slice(data);
+            self.heap[addr + 16..addr + 16 + data.len()].copy_from_slice(data);
         }
 
         Ok(addr)
@@ -387,32 +348,11 @@ impl Memory {
 
     /// Load a pre-serialized object from executable data into heap.
     pub fn load_from_executable(&mut self, data: &[u8], is_static: bool) -> Result<usize, VmError> {
-        // Validate minimum size: header (16) + RTTI (16) + data_len (4)
-        if data.len() < 36 {
-            return Err(VmError::InvalidExecutable);
-        }
-
-        // Read total size from header
-        let total_size = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
-
-        // Validate total size matches actual data length
-        if total_size != data.len() {
-            return Err(VmError::InvalidExecutable);
-        }
-
-        // Read data length
-        let data_len = u32::from_le_bytes([data[32], data[33], data[34], data[35]]) as usize;
-
-        // Verify length
-        if 16 + 16 + 4 + data_len != total_size {
-            return Err(VmError::InvalidExecutable);
-        }
-
         // Allocate and copy data to heap
-        let addr = self.allocate(total_size, is_static)?;
-        self.heap[addr..addr + total_size].copy_from_slice(data);
+        let addr = self.allocate(data.len(), is_static)?;
+        self.heap[addr..addr + data.len()].copy_from_slice(data);
         self.header_cache
-            .insert(addr, (total_size as u32, is_static));
+            .insert(addr, (data.len() as u32, is_static));
 
         Ok(addr)
     }

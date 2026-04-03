@@ -12,7 +12,6 @@ pub enum VmError {
         requested: usize,
         available: usize,
     },
-    InvalidAllocation(usize),
     InvalidReference(usize),
     ZeroAllocation,
     StackUnderflow,
@@ -21,7 +20,7 @@ pub enum VmError {
     LocalOutOfBounds(usize),
     RTTITooLarge(usize),
     InvalidRTTI(String),
-    TypeMismatch(&'static str, String),
+    TypeMismatch(String, String),
     Runtime(String),
     InvalidExecutable,
     CorruptedObject(String),
@@ -29,8 +28,8 @@ pub enum VmError {
 }
 
 impl VmError {
-    pub fn type_mismatch(expected: &'static str, found: impl Into<String>) -> Self {
-        VmError::TypeMismatch(expected, found.into())
+    pub fn type_mismatch(expected: impl Into<String>, found: impl Into<String>) -> Self {
+        VmError::TypeMismatch(expected.into(), found.into())
     }
     pub fn runtime(reason: impl Into<String>) -> Self {
         VmError::Runtime(reason.into())
@@ -61,7 +60,6 @@ impl fmt::Display for VmError {
                     requested, available
                 )
             }
-            VmError::InvalidAllocation(addr) => write!(f, "Invalid address to free: {}", addr),
             VmError::InvalidReference(addr) => write!(f, "Invalid address to reference: {}", addr),
             VmError::ZeroAllocation => write!(f, "Cannot allocate zero bytes"),
             VmError::StackUnderflow => write!(f, "Stack underflow"),

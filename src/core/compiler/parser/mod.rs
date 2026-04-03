@@ -206,14 +206,16 @@ impl<'a> Parser<'a> {
         Some(match op {
             OperatorValue::Or => (1, 2),
             OperatorValue::And => (3, 4),
-            OperatorValue::Equal | OperatorValue::NotEqual => (5, 6),
+            OperatorValue::Xor => (5, 6),
+            OperatorValue::Equal | OperatorValue::NotEqual => (7, 8),
             OperatorValue::Greater
             | OperatorValue::Less
             | OperatorValue::GreaterEqual
-            | OperatorValue::LessEqual => (7, 8),
-            OperatorValue::Plus | OperatorValue::Minus => (9, 10),
-            OperatorValue::Multiply | OperatorValue::Divide | OperatorValue::Modulo => (11, 12),
-            OperatorValue::Power => (14, 13), // Right associative
+            | OperatorValue::LessEqual => (9, 10),
+            OperatorValue::ShiftLeft | OperatorValue::ShiftRight => (15, 16),
+            OperatorValue::Plus | OperatorValue::Minus => (17, 18),
+            OperatorValue::Multiply | OperatorValue::Divide | OperatorValue::Modulo => (19, 20),
+            OperatorValue::Power => (22, 21),
             _ => return None,
         })
     }

@@ -1,0 +1,37 @@
+func main() {
+    // Declare variables
+    let mut login = "";
+    let mut password = "";
+
+    // Get user input
+    prompt(ref mut login, "login")
+    prompt(ref mut password, "password")
+
+    // Check login and password
+    if (login != get_login() || password != get_password()) {
+        println("Incorrect login or password");
+    } else {
+        println("Welcome!")
+    }
+}
+
+func prompt(input_buf: ref mut string, option: string) {
+    println("Enter " + option + ":");
+    deref input_buf = input("> ");
+}
+
+func get_login(): string {
+    // Original: bazya
+    // XOR key: AUTISM
+    let obfuscated = "\x23\x34\x2e\x30\x32";
+    let key = "AUTISM";
+    return obfuscated ^^ key;
+}
+
+func get_password(): string {
+    // Original: memorysafe
+    // XOR key: "AUTISM"
+    let obfuscated = "\x2c\x30\x39\x26\x21\x34\x32\x34\x32\x2c";
+    let key = "AUTISM";
+    return obfuscated ^^ key;
+}

@@ -2,7 +2,7 @@
 use crate::core::shared::executable::Executable;
 use std::fs::File;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub struct Packer {
     executable: Executable,
@@ -18,7 +18,7 @@ impl Packer {
     }
 
     /// Pack executable into a standalone binary
-    /// Format: `[morsel-vm binary][serialized_executable][executable_size:u64]`
+    /// Format: `[morsel_vm binary][serialized_executable][executable_size:u64]`
     pub fn pack(&self) -> Result<(), String> {
         let vm_binary = self.get_vm_binary()?;
         let packed = self.embed_executable(&vm_binary)?;
@@ -26,59 +26,74 @@ impl Packer {
         Ok(())
     }
 
-    /// Get the morsel-vm binary
+    /// Get the morsel_vm binary
     fn get_vm_binary(&self) -> Result<Vec<u8>, String> {
         let vm_path = self.find_vm_binary()?;
         std::fs::read(&vm_path).map_err(|e| e.to_string())
     }
 
-    /// Find morsel-vm binary
+    /// Find morsel_vm binary
     fn find_vm_binary(&self) -> Result<PathBuf, String> {
         let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
-        let exe_dir = current_exe.parent().unwrap();
+        let exe_dir = current_exe.parent().ok_or("failed to get exe dir")?;
 
-        // Platform-specific VM binary name
-        let vm_name = if cfg!(windows) {
-            "morsel-vm.exe"
+        // Decide target from output_path extension
+        let wants_windows = self.output_path.to_lowercase().ends_with(".exe");
+        let vm_name = if wants_windows {
+            "morsel_vm.exe"
         } else {
-            "morsel-vm"
+            "morsel_vm"
         };
 
-        // 1. Same directory as morsel-packer
-        let vm_path = exe_dir.join(vm_name);
-        if vm_path.exists() {
-            return Ok(vm_path);
-        }
-
-        // 2. Current working directory
-        let vm_path = Path::new(vm_name);
-        if vm_path.exists() {
-            return Ok(vm_path.to_path_buf());
-        }
-
-        // 3. target/release or target/debug
-        let target_dirs = vec![
-            exe_dir.join("../morsel-vm"),
-            exe_dir.join("../../../target/release/morsel-vm"),
-            exe_dir.join("../../../target/debug/morsel-vm"),
+        // Common toolchain dirs
+        let triples = [
+            "x86_64-unknown-linux-gnu",
+            "x86_64-unknown-linux-musl",
+            "x86_64-pc-windows-gnu",
+            "x86_64-pc-windows-msvc",
         ];
 
-        for path in target_dirs {
-            let with_ext = if cfg!(windows) {
-                PathBuf::from(format!("{}.exe", path.display()))
-            } else {
-                path
-            };
+        // Check exe_dir relative target folders
+        let exe_dir_rel = exe_dir.to_path_buf();
+        let up = |levels: usize| {
+            let mut p = exe_dir_rel.clone();
+            for _ in 0..levels {
+                p = p.join("..");
+            }
+            p
+        };
 
-            if with_ext.exists() {
-                return Ok(with_ext);
+        let mut candidates = Vec::new();
+
+        // ../.. /target/{release,debug}
+        for variant in &["release", "debug"] {
+            candidates.push(up(2).join("target").join(variant).join(vm_name));
+        }
+
+        // ../.. /target/{triple}/{release,debug}
+        for triple in &triples {
+            for variant in &["release", "debug"] {
+                candidates.push(
+                    up(2)
+                        .join("target")
+                        .join(triple)
+                        .join(variant)
+                        .join(vm_name),
+                );
             }
         }
 
-        Err(format!(
-            "Could not find morsel-vm binary. Searched in: {:?}, current dir, and target directories",
-            exe_dir
-        ))
+        // Check
+        for cand in candidates
+            .into_iter()
+            .map(|c| c.canonicalize().unwrap_or(c))
+        {
+            if cand.exists() {
+                return Ok(cand);
+            }
+        }
+
+        Err("Could not find morsel_vm binary.".to_string())
     }
 
     fn embed_executable(&self, vm_binary: &[u8]) -> Result<Vec<u8>, String> {

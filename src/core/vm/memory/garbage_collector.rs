@@ -69,6 +69,9 @@ impl Memory {
         // Phase 2: Sweep unreachable objects
         let swept_count = self.sweep_phase()?;
 
+        // Optimize free list
+        self.consolidate_free_list();
+
         self.log_gc_completion(gc_start, marked_count, swept_count);
         Ok(())
     }
@@ -174,26 +177,53 @@ impl Memory {
         Ok(swept_count)
     }
 
-    fn log_gc_start(&mut self) {
-        if self.debug {
-            self.record_event(format!(
-                "[GC]: Starting garbage collection: Heap used=0x{:06x}",
-                self.next_free
-            ));
+    fn consolidate_free_list(&mut self) {
+        if self.free_list.len() <= 1 {
+            return;
         }
+
+        // Sort by base then merge adjacent blocks in one pass
+        self.free_list.sort_by_key(|fb| fb.base);
+
+        let mut write = 0;
+        for read in 0..self.free_list.len() {
+            if write == 0 {
+                self.free_list[write] = self.free_list[read];
+                write += 1;
+                continue;
+            }
+
+            let last = self.free_list[write - 1];
+            let cur = self.free_list[read];
+
+            if last.base + last.size == cur.base {
+                self.free_list[write - 1].size = last.size + cur.size;
+            } else {
+                if write != read {
+                    self.free_list[write] = cur;
+                }
+                write += 1;
+            }
+        }
+        self.free_list.truncate(write);
+    }
+
+    fn log_gc_start(&mut self) {
+        self.record_event(format!(
+            "[GC]: Starting garbage collection: Heap used=0x{:06x}",
+            self.next_free
+        ));
     }
 
     fn log_gc_completion(&mut self, gc_start: Instant, marked_count: usize, swept_count: usize) {
-        if self.debug {
-            let duration_ms = gc_start.elapsed().as_millis();
-            self.record_event(format!(
-                "[GC]: Marked {} objects | Swept {} objects",
-                marked_count, swept_count
-            ));
-            self.record_event(format!(
-                "[GC]: Completed: Heap used=0x{:06x}; Duration={}ms;",
-                self.next_free, duration_ms
-            ));
-        }
+        let duration_ms = gc_start.elapsed().as_millis();
+        self.record_event(format!(
+            "[GC]: Marked {} objects | Swept {} objects",
+            marked_count, swept_count
+        ));
+        self.record_event(format!(
+            "[GC]: Completed: Heap used=0x{:06x}; Duration={}ms;",
+            self.next_free, duration_ms
+        ));
     }
 }

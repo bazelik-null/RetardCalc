@@ -80,26 +80,25 @@ impl<'a> Lexer<'a> {
                 }
             }
             'a'..='z' | 'A'..='Z' | '_' => {
-                // Parse as identifier first, then chek if it's a keyword
+                // Parse as identifier first, then chek if it's a bool or keyword
                 let name = self.parse_identifier();
-                let keyword = self.parse_keyword(name.as_str());
-                match keyword {
-                    None => {
-                        let name_key = self.push_string(&name);
-                        self.push_token(TokenType::Identifier(name_key), name.len() as u16);
-                    }
-                    Some(keyword) => {
-                        self.push_token(TokenType::Keyword(keyword), name.len() as u16);
-                    }
+                // Check for bool
+                if let Some(boolean) = self.parse_boolean(name.as_str()) {
+                    self.push_token(TokenType::Literal(boolean), name.len() as u16);
+                }
+                // Check for keyword
+                else if let Some(keyword) = self.parse_keyword(name.as_str()) {
+                    self.push_token(TokenType::Keyword(keyword), name.len() as u16);
+                }
+                // Save as id
+                else {
+                    let name_key = self.push_string(&name);
+                    self.push_token(TokenType::Identifier(name_key), name.len() as u16);
                 }
             }
-            '>' | '<' | '!' | '=' | '&' | '|' => {
-                let token = self.parse_logic_operator();
+            '+' | '-' | '*' | '%' | '^' | '>' | '<' | '!' | '=' | '&' | '|' => {
+                let token = self.parse_operator();
                 self.push_token(token, 1);
-            }
-            '+' | '-' | '*' | '%' | '^' => {
-                let op = self.parse_operator();
-                self.push_token(TokenType::Operator(op), 1);
             }
             '(' | ')' | '{' | '}' | '[' | ']' | ',' | ';' | ':' => {
                 let syntax = self.parse_syntax();
@@ -134,6 +133,43 @@ impl<'a> Lexer<'a> {
                     '\\' => result.push('\\'),
                     '"' => result.push('"'),
                     '0' => result.push('\0'),
+                    'x' => {
+                        // Hex escape sequence: \xHH
+                        self.advance();
+
+                        if self.is_eof() {
+                            self.error("Incomplete hex escape sequence", 1);
+                            break;
+                        }
+
+                        let hex_digit1 = self.peek();
+                        self.advance();
+
+                        if self.is_eof() {
+                            self.error("Incomplete hex escape sequence", 1);
+                            break;
+                        }
+
+                        let hex_digit2 = self.peek();
+
+                        // Parse two hex digits
+                        match (hex_digit1.to_digit(16), hex_digit2.to_digit(16)) {
+                            (Some(d1), Some(d2)) => {
+                                let byte_value = (d1 * 16 + d2) as u8;
+                                result.push(byte_value as char);
+                            }
+                            _ => {
+                                self.error(
+                                    &format!(
+                                        "Invalid hex escape sequence: \\x{}{}",
+                                        hex_digit1, hex_digit2
+                                    ),
+                                    1,
+                                );
+                                result.push('?');
+                            }
+                        }
+                    }
                     _ => {
                         self.error("Unknown escape sequence", 1);
                         result.push(self.peek());
@@ -232,97 +268,99 @@ impl<'a> Lexer<'a> {
         identifier
     }
 
+    /// Parses booleans
+    fn parse_boolean(&mut self, string: &str) -> Option<LiteralValue> {
+        match string {
+            "true" => Some(LiteralValue::Boolean(true)),
+            "false" => Some(LiteralValue::Boolean(false)),
+            _ => None,
+        }
+    }
+
     /// Parses keywords
     fn parse_keyword(&mut self, string: &str) -> Option<KeywordValue> {
         match string {
+            // Variables
             "let" => Some(KeywordValue::VariableDecl),
             "mut" => Some(KeywordValue::Mutable),
+            "ref" => Some(KeywordValue::Reference),
+            "deref" => Some(KeywordValue::Dereference),
+            // Functions
             "func" => Some(KeywordValue::FunctionDecl),
+            "return" => Some(KeywordValue::Return),
+            // Control flow
             "if" => Some(KeywordValue::If),
             "else" => Some(KeywordValue::Else),
             "for" => Some(KeywordValue::For),
             "while" => Some(KeywordValue::While),
+            // Types
             "int" => Some(KeywordValue::Integer),
             "float" => Some(KeywordValue::Float),
             "bool" => Some(KeywordValue::Boolean),
             "string" => Some(KeywordValue::String),
-            "ref" => Some(KeywordValue::Reference),
-            "return" => Some(KeywordValue::Return),
+            "void" => Some(KeywordValue::Void),
             _ => None,
         }
     }
 
     /// Parses an operator token
-    fn parse_operator(&mut self) -> OperatorValue {
-        let op = match self.peek() {
-            '+' => OperatorValue::Plus,
-            '-' => OperatorValue::Minus,
-            '*' => OperatorValue::Multiply,
-            '%' => OperatorValue::Modulo,
-            '^' => OperatorValue::Power,
-            _ => unreachable!("Invalid operator in parse_operator"),
-        };
-
-        self.advance();
-        op
-    }
-
-    /// Parses a logic operator token
-    fn parse_logic_operator(&mut self) -> TokenType {
+    /// Parses both arithmetic and logic operators
+    fn parse_operator(&mut self) -> TokenType {
         let ch = self.peek();
+        let next = self.peek_ahead();
 
-        match (ch, self.peek_ahead()) {
-            ('=', '=') => {
-                self.advance();
-                self.advance();
-                TokenType::Operator(OperatorValue::Equal)
-            }
-            ('!', '=') => {
-                self.advance();
-                self.advance();
-                TokenType::Operator(OperatorValue::NotEqual)
-            }
-            ('<', '=') => {
-                self.advance();
-                self.advance();
-                TokenType::Operator(OperatorValue::LessEqual)
-            }
-            ('>', '=') => {
-                self.advance();
-                self.advance();
-                TokenType::Operator(OperatorValue::GreaterEqual)
-            }
-            ('=', _) => {
-                self.advance();
-                TokenType::Syntax(SyntaxValue::Assign)
-            }
-            ('<', _) => {
-                self.advance();
-                TokenType::Operator(OperatorValue::Less)
-            }
-            ('>', _) => {
-                self.advance();
-                TokenType::Operator(OperatorValue::Greater)
-            }
-            ('!', _) => {
-                self.advance();
+        let token_type = match (ch, next) {
+            // Two-character operators
+            ('=', '=') => TokenType::Operator(OperatorValue::Equal),
+            ('!', '=') => TokenType::Operator(OperatorValue::NotEqual),
+            ('<', '=') => TokenType::Operator(OperatorValue::LessEqual),
+            ('>', '=') => TokenType::Operator(OperatorValue::GreaterEqual),
+            ('&', '&') => TokenType::Operator(OperatorValue::And),
+            ('|', '|') => TokenType::Operator(OperatorValue::Or),
+            ('^', '^') => TokenType::Operator(OperatorValue::Xor),
+            ('<', '<') => TokenType::Operator(OperatorValue::ShiftLeft),
+            ('>', '>') => TokenType::Operator(OperatorValue::ShiftRight),
+
+            // Single-character operators
+            ('+', _) => TokenType::Operator(OperatorValue::Plus),
+            ('-', _) => TokenType::Operator(OperatorValue::Minus),
+            ('*', _) => TokenType::Operator(OperatorValue::Multiply),
+            ('%', _) => TokenType::Operator(OperatorValue::Modulo),
+            ('^', _) => TokenType::Operator(OperatorValue::Power),
+            ('<', _) => TokenType::Operator(OperatorValue::Less),
+            ('>', _) => TokenType::Operator(OperatorValue::Greater),
+            ('!', _) => TokenType::Operator(OperatorValue::Not),
+
+            // Assignment
+            ('=', _) => TokenType::Syntax(SyntaxValue::Assign),
+
+            // References
+            ('&', _) => TokenType::Keyword(KeywordValue::Reference),
+
+            _ => {
+                self.error("Unexpected operator", 1);
                 TokenType::Operator(OperatorValue::Not)
             }
-            ('&', '&') => {
-                self.advance();
-                self.advance();
-                TokenType::Operator(OperatorValue::And)
-            }
-            ('|', '|') => {
-                self.advance();
-                self.advance();
-                TokenType::Operator(OperatorValue::Or)
-            }
-            _ => {
-                self.error("Unexpected token", 1);
-                TokenType::Operator(OperatorValue::Not) // Default to not
-            }
+        };
+
+        // Advance based on operator length
+        self.advance();
+        if matches!(
+            (ch, next),
+            ('=', '=')
+                | ('!', '=')
+                | ('<', '=')
+                | ('>', '=')
+                | ('&', '&')
+                | ('|', '|')
+                | ('>', '>')
+                | ('<', '<')
+                | ('^', '^')
+        ) {
+            self.advance();
         }
+
+        token_type
     }
 
     /// Parses a syntax token (punctuation and delimiters)

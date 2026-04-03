@@ -77,6 +77,10 @@ pub enum OperatorValue {
     LessEqual,    // <=
     And,          // &&
     Or,           // ||
+    Xor,          // ^^
+    // Binary operators
+    ShiftLeft,  // <<
+    ShiftRight, // >>
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -107,11 +111,14 @@ pub enum KeywordValue {
     While, // while
     For,   // for
     // Types
-    Integer,   // int
-    Float,     // float
-    Boolean,   // bool
-    String,    // string
-    Reference, // ref
+    Integer, // int
+    Float,   // float
+    Boolean, // bool
+    String,  // string
+    Void,    // void
+    // References
+    Reference,   // ref
+    Dereference, // deref
 }
 
 impl Token {
@@ -143,6 +150,9 @@ impl fmt::Display for OperatorValue {
             OperatorValue::LessEqual => "<=",
             OperatorValue::And => "&&",
             OperatorValue::Or => "||",
+            OperatorValue::Xor => "^^",
+            OperatorValue::ShiftLeft => "<<",
+            OperatorValue::ShiftRight => ">>",
         };
 
         write!(f, "{}", op)

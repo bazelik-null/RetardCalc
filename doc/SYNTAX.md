@@ -8,10 +8,12 @@ to write morsel programs.
 1. [Comments](#comments)
 2. [Variables and Mutability](#variables-and-mutability)
 3. [Data Types](#data-types)
-4. [Operators](#operators)
-5. [Control Flow](#control-flow)
-6. [Loops](#loops)
-7. [Functions](#functions)
+4. [References](#references)
+5. [Arrays](#arrays)
+6. [Operators](#operators)
+7. [Control Flow](#control-flow)
+8. [Loops](#loops)
+9. [Functions](#functions)
 
 ## Comments
 
@@ -66,7 +68,71 @@ preventing type errors during program execution.
 - **String:** `string` - Text data
 - **Boolean:** `bool` - Boolean value (true/false)
 
-### Arrays
+## References
+
+**References** give you indirect access to variables. Pass them to functions to modify the original value in-place.
+
+### Reference Types
+
+A **reference** points to a variable's memory location instead of holding a copy of its value.
+By default, references are **immutable**.
+
+```morsel
+let x = 5;
+let y = ref x;  // y is a reference to x
+
+let mut a = 1;
+let mut b = ref mut a; // b is a mutable reference to a
+```
+
+### Dereferencing
+
+To dereference a variable and overwrite it or get value use `deref`.
+
+```morsel
+let mut x = 5;
+let y = ref mut x;
+
+deref y = deref y + 1;
+
+println(deref y);      // Prints 6
+```
+
+### References in Functions
+
+Pass references to functions to modify the original variable:
+
+```morsel
+func increment(x: ref mut int) {
+    deref x = deref x + 1;
+}
+
+func main() {
+    let mut value = 5;
+    increment(ref mut value);
+    println(value);  // Prints 6
+}
+```
+
+### References to complex types
+
+You can even pass references to complex types (which store references to heap)
+
+```morsel
+func main() {
+    let mut input = input("Enter message: ");
+    echo(ref mut input);
+    print(input);
+}
+
+func echo(input: ref mut string) {
+    deref input = "Echo: " + deref input;
+}
+```
+
+**TIP:** You can use `&` as `ref` and `*` as `deref`!
+
+## Arrays
 
 Morsel supports both **fixed-size** and **dynamic arrays**.
 

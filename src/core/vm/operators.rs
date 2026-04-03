@@ -7,7 +7,7 @@ use crate::core::vm::{Number, VirtualMachine};
 use std::io;
 use std::io::Write;
 
-/// Macro for binary bitwise operations (AND, OR, XOR)
+/// Macro for binary bitwise operations (AND, OR)
 macro_rules! bitwise_binary_op {
     ($name:ident, $op:expr) => {
         pub fn $name(&mut self) -> Result<(), VmError> {
@@ -24,11 +24,34 @@ macro_rules! bitwise_binary_op {
 macro_rules! shift_op {
     ($name:ident, $shift_fn:expr) => {
         pub fn $name(&mut self) -> Result<(), VmError> {
-            let b = self.memory.pop()?;
-            let a = self.memory.pop()?;
-            let bi = self.require_int_value(b)? as u32;
-            let ai = self.require_int_value(a)?;
-            self.push_num(Number::Int($shift_fn(ai, bi)))
+            let vb = self.memory.pop()?;
+            let va = self.memory.pop()?;
+
+            // Get shift amount
+            let shift_amount = match self.value_to_num(vb) {
+                Ok(Number::Int(i)) if i >= 0 => i as u32,
+                Ok(Number::Float(f)) if f >= 0.0 && f.fract() == 0.0 => f as u32,
+                _ => {
+                    return Err(VmError::type_mismatch(
+                        "non-negative integer",
+                        "shift amount",
+                    ))
+                }
+            };
+
+            // Perform shift
+            match self.value_to_num(va) {
+                Ok(Number::Int(i)) => {
+                    self.push_num(Number::Int($shift_fn(i, shift_amount)))?;
+                }
+                Ok(Number::Float(f)) => {
+                    let i = f as i32;
+                    self.push_num(Number::Float($shift_fn(i, shift_amount) as f32))?;
+                }
+                Err(e) => return Err(e),
+            }
+
+            Ok(())
         }
     };
 }
@@ -37,7 +60,6 @@ impl VirtualMachine {
     // Bitwise binary operations
     bitwise_binary_op!(op_and, |a, b| a & b);
     bitwise_binary_op!(op_or, |a, b| a | b);
-    bitwise_binary_op!(op_xor, |a, b| a ^ b);
 
     // Shift operations
     shift_op!(op_sla, |a: i32, b: u32| a.wrapping_shl(b));
@@ -166,8 +188,12 @@ impl VirtualMachine {
             let (ta, da) = self.heap_get_type_and_data(*a_addr)?;
             let (tb, db) = self.heap_get_type_and_data(*b_addr)?;
             if ta == Type::String && tb == Type::String {
-                let sa = std::str::from_utf8(da).unwrap_or_default().to_string();
-                let sb = std::str::from_utf8(db).unwrap_or_default().to_string();
+                let sa = std::str::from_utf8(da)
+                    .map_err(|e| VmError::type_mismatch("string utf8", e.to_string()))?
+                    .to_string();
+                let sb = std::str::from_utf8(db)
+                    .map_err(|e| VmError::type_mismatch("string utf8", e.to_string()))?
+                    .to_string();
                 return self.push_comparison(sa, sb, opcode);
             }
         }
@@ -196,9 +222,69 @@ impl VirtualMachine {
         self.push_num(Number::Int(res))
     }
 
+    pub fn op_xor(&mut self) -> Result<(), VmError> {
+        let vb = self.memory.pop()?;
+        let va = self.memory.pop()?;
+
+        // Try numeric operation first
+        match (self.value_to_num(va), self.value_to_num(vb)) {
+            (Ok(na), Ok(nb)) => {
+                let result = match (na, nb) {
+                    (Number::Int(a), Number::Int(b)) => Number::Int(a ^ b),
+                    (Number::Int(a), Number::Float(b)) => {
+                        let bi = b as i32;
+                        Number::Int(a ^ bi)
+                    }
+                    (Number::Float(a), Number::Int(b)) => {
+                        let ai = a as i32;
+                        Number::Int(ai ^ b)
+                    }
+                    (Number::Float(a), Number::Float(b)) => {
+                        let ai = a as i32;
+                        let bi = b as i32;
+                        Number::Int(ai ^ bi)
+                    }
+                };
+                self.push_num(result)?;
+                return Ok(());
+            }
+            _ => {
+                // Fall back to string operation
+                let sa = self.value_to_string(&va)?;
+                let sb = self.value_to_string(&vb)?;
+
+                let result = self.xor_strings(&sa, &sb)?;
+
+                let (rtti, data) = self.build_data(result, Type::String)?;
+                let addr = self.memory.save_to_heap(&rtti, &data, false)?;
+                self.push_ref(addr)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// XOR two strings byte-by-byte
+    /// Shorter string is padded with zeros
+    fn xor_strings(&self, sa: &str, sb: &str) -> Result<String, VmError> {
+        let a_bytes = sa.as_bytes();
+        let b_bytes = sb.as_bytes();
+
+        // Use the shorter string's length, and cycle the longer one
+        let len = a_bytes.len();
+        let mut result = Vec::with_capacity(len);
+
+        for i in 0..len {
+            let a_byte = a_bytes[i];
+            let b_byte = b_bytes[i % b_bytes.len()]; // Cycle through b
+            result.push(a_byte ^ b_byte);
+        }
+
+        Ok(String::from_utf8_lossy(&result).into_owned())
+    }
+
     /// Pop reference address (an address to a heap object) and push value or ref
-    pub fn op_load(&mut self) -> Result<(), VmError> {
-        let addr = self.pop_ref()?;
+    pub fn op_load(&mut self, addr: usize) -> Result<(), VmError> {
         let (rtti_bytes, data) = self.memory.load_from_heap(addr)?;
 
         let ty = Type::from_bytes(rtti_bytes)
@@ -226,10 +312,7 @@ impl VirtualMachine {
     }
 
     /// Pop value, address, and write to target based on type
-    pub fn op_store(&mut self) -> Result<(), VmError> {
-        let val = self.memory.pop()?;
-        let addr = self.pop_ref()?;
-
+    pub fn op_store(&mut self, val: Value, addr: usize) -> Result<(), VmError> {
         // If value is numeric and target expects numeric, write payload
         if let Value::Imm(num) = val {
             let ty = self.heap_get_type(addr)?;
@@ -275,14 +358,20 @@ impl VirtualMachine {
             Value::Imm(i) if i.to_i32() >= 0 => i.to_i32() as usize,
             Value::Imm(_) => {
                 return Err(VmError::type_mismatch(
+                    format!("arg count {:?}", argc_val).as_str(),
                     "non-negative integer",
-                    format!("arg count {:?}", argc_val),
                 ));
             }
             Value::Ref(_) => {
                 return Err(VmError::type_mismatch(
-                    "integer",
                     format!("arg count {:?}", argc_val),
+                    "reference",
+                ));
+            }
+            Value::StackRef { .. } => {
+                return Err(VmError::type_mismatch(
+                    format!("arg count {:?}", argc_val).as_str(),
+                    "stack reference",
                 ));
             }
         };
@@ -330,6 +419,7 @@ impl VirtualMachine {
         io::stdin()
             .read_line(&mut input)
             .map_err(|e| VmError::runtime(e.to_string()))?;
+        input = input.trim().to_string();
 
         // Save data to heap
         let (rtti, data) = self.build_data(input, Type::String)?;

@@ -79,6 +79,85 @@ impl Memory {
             .ok_or(VmError::LocalOutOfBounds(index))
     }
 
+    /// Create a stack reference to a local variable
+    pub fn create_stack_ref(&self, local_index: usize) -> Result<Value, VmError> {
+        let frame_count = self.call_stack.len();
+        if frame_count == 0 {
+            return Err(VmError::NoActiveFrame);
+        }
+
+        let frame_index = frame_count - 1; // Current frame
+        let frame = &self.call_stack[frame_index];
+
+        if local_index >= frame.locals.len() {
+            return Err(VmError::LocalOutOfBounds(local_index));
+        }
+
+        Ok(Value::StackRef {
+            frame_index,
+            local_index,
+        })
+    }
+
+    /// Dereference a stack reference and get the value
+    pub fn dereference_stack_ref(
+        &self,
+        frame_index: usize,
+        local_index: usize,
+    ) -> Result<Value, VmError> {
+        if frame_index >= self.call_stack.len() {
+            return Err(VmError::LocalOutOfBounds(frame_index));
+        }
+
+        let frame = &self.call_stack[frame_index];
+        frame
+            .locals
+            .get(local_index)
+            .copied()
+            .ok_or(VmError::LocalOutOfBounds(local_index))
+    }
+
+    /// Update a value through a stack reference
+    pub fn set_through_stack_ref(
+        &mut self,
+        frame_index: usize,
+        local_index: usize,
+        value: Value,
+    ) -> Result<(), VmError> {
+        if frame_index >= self.call_stack.len() {
+            return Err(VmError::LocalOutOfBounds(frame_index));
+        }
+
+        let frame = &mut self.call_stack[frame_index];
+        if local_index >= frame.locals.len() {
+            frame.locals.resize(local_index + 1, value);
+        }
+        frame.locals[local_index] = value;
+        Ok(())
+    }
+
+    /// Check if a stack reference is still valid
+    pub fn is_stack_ref_valid(&self, frame_index: usize, local_index: usize) -> bool {
+        frame_index < self.call_stack.len()
+            && local_index < self.call_stack[frame_index].locals.len()
+    }
+
+    /// Dereference any value that might be a stack reference
+    pub fn resolve_value(&self, value: Value) -> Result<Value, VmError> {
+        match value {
+            Value::StackRef {
+                frame_index,
+                local_index,
+            } => {
+                if !self.is_stack_ref_valid(frame_index, local_index) {
+                    return Err(VmError::InvalidReference(frame_index));
+                }
+                self.dereference_stack_ref(frame_index, local_index)
+            }
+            other => Ok(other),
+        }
+    }
+
     pub fn peek_stack(&self) -> &[Value] {
         &self.operand_stack
     }

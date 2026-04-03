@@ -50,6 +50,8 @@ impl<'a> CodeGenerator<'a> {
             Node::SysCall { id, args } => self.gen_syscall(*id, args),
             Node::ArrayAccess { .. } => Err("Unimplemented".to_string()),
             Node::Return(value) => self.gen_return(value),
+            Node::Reference { value: inner, .. } => self.gen_reference(inner),
+            Node::Dereference(inner) => self.gen_dereference(inner),
         }
     }
 
@@ -79,21 +81,51 @@ impl<'a> CodeGenerator<'a> {
         Ok(())
     }
 
+    fn gen_reference(&mut self, inner: &Node) -> Result<(), String> {
+        match inner {
+            Node::Identifier(name) => {
+                let local_id = self
+                    .scope
+                    .lookup(*name)
+                    .ok_or_else(|| "Undefined variable".to_string())?;
+
+                // Push the address of the local variable
+                self.emit(PUSH_LOCAL_REF, local_id.0);
+                Ok(())
+            }
+            Node::ArrayAccess { .. } => Err("Array access is not implemented".to_string()),
+            Node::Dereference(ref_expr) => {
+                // Taking reference of dereferenced value: &*ptr -> ptr
+                self.generate_node(ref_expr)?;
+                Ok(())
+            }
+            _ => Err("Cannot take reference of this expression".to_string()),
+        }
+    }
+
+    fn gen_dereference(&mut self, inner: &Node) -> Result<(), String> {
+        // Evaluate the reference expression
+        self.generate_node(inner)?;
+
+        // Dereference
+        self.emit(LOAD, 0);
+
+        Ok(())
+    }
+
     fn gen_identifier(&mut self, name: Spur) -> Result<(), String> {
         let local_id = self
             .scope
             .lookup(name)
             .ok_or_else(|| "Undefined variable".to_string())?;
 
+        // Load the value
         self.emit(LOAD_LOCAL, local_id.0);
 
         Ok(())
     }
 
     fn gen_assignment(&mut self, target: &Node, value: &Node) -> Result<(), String> {
-        // Generate argument
-        self.generate_node(value)?;
-
         match target {
             Node::Identifier(name) => {
                 let local_id = self
@@ -101,12 +133,20 @@ impl<'a> CodeGenerator<'a> {
                     .lookup(*name)
                     .ok_or_else(|| "Undefined variable".to_string())?;
 
-                self.emit(STORE_LOCAL, local_id.0);
+                // Direct assignment: var = value
+                self.generate_node(value)?; // Push value
+                self.emit(STORE_LOCAL, local_id.0); // Pop and store
+            }
+
+            Node::Dereference(ref_expr) => {
+                // Assignment through dereference: *ptr = value
+                self.generate_node(ref_expr)?; // Push reference
+                self.generate_node(value)?; // Push value
+                self.emit(STORE, 0); // Pop value, pop ref, store
             }
 
             Node::ArrayAccess { .. } => {
-                // TODO: Implement array element assignment
-                todo!();
+                return Err("Array assignment unimplemented".to_string());
             }
             _ => {
                 return Err("Invalid assignment target".to_string());
@@ -336,6 +376,9 @@ impl<'a> CodeGenerator<'a> {
             OperatorValue::LessEqual => self.emit(LE, 0),
             OperatorValue::And => self.emit(AND, 0),
             OperatorValue::Or => self.emit(OR, 0),
+            OperatorValue::Xor => self.emit(XOR, 0),
+            OperatorValue::ShiftLeft => self.emit(SLA, 0),
+            OperatorValue::ShiftRight => self.emit(SRA, 0),
         }
     }
 

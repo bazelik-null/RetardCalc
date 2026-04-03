@@ -1,6 +1,8 @@
-use crate::core::compiler::parser::Parser;
 use crate::core::compiler::parser::tree::Node;
-use crate::core::compiler::preprocessor::token::{OperatorValue, SyntaxValue, TokenType};
+use crate::core::compiler::parser::Parser;
+use crate::core::compiler::preprocessor::token::{
+    KeywordValue, OperatorValue, SyntaxValue, TokenType,
+};
 use crate::core::shared::builtin_func::SysCallId;
 use std::str::FromStr;
 
@@ -15,7 +17,7 @@ impl<'a> Parser<'a> {
             }
 
             let token = match self.peek() {
-                Some(t) => t,
+                Some(t) => *t,
                 None => break,
             };
 
@@ -30,7 +32,7 @@ impl<'a> Parser<'a> {
                     value: Box::new(rhs),
                 };
 
-                continue;
+                break;
             }
 
             let op = match token.token_type {
@@ -74,11 +76,37 @@ impl<'a> Parser<'a> {
                 Ok(Node::Identifier(spur))
             }
             TokenType::Syntax(SyntaxValue::LBracket) => self.parse_array_literal(),
+            TokenType::Keyword(KeywordValue::Dereference) => {
+                self.advance();
+
+                let rhs = self.parse_prefix()?;
+
+                Ok(Node::Dereference(Box::new(rhs)))
+            }
+            TokenType::Keyword(KeywordValue::Reference) => {
+                self.advance();
+
+                let mutable = self.match_keyword(KeywordValue::Mutable);
+                let rhs = self.parse_prefix()?;
+
+                Ok(Node::Reference {
+                    value: Box::new(rhs),
+                    mutable,
+                })
+            }
             TokenType::Operator(op) => match op {
-                OperatorValue::Plus | OperatorValue::Minus | OperatorValue::Not => {
+                OperatorValue::Plus
+                | OperatorValue::Minus
+                | OperatorValue::Not
+                | OperatorValue::Multiply => {
                     self.advance();
 
-                    let rhs = self.parse_expression(100)?;
+                    let rhs = self.parse_expression(50)?;
+
+                    // Dereference
+                    if op == OperatorValue::Multiply {
+                        return Ok(Node::Dereference(Box::new(rhs)));
+                    }
 
                     Ok(Node::Unary {
                         op,
@@ -140,6 +168,7 @@ impl<'a> Parser<'a> {
                 Ok(TokenType::Syntax(SyntaxValue::LBracket)) => {
                     // Array indexing: arr[index]
                     self.advance();
+
                     let index = self.parse_expression(0)?;
                     self.expect_syntax(SyntaxValue::RBracket)?;
 

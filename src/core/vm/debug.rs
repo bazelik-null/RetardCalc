@@ -100,7 +100,10 @@ impl VirtualMachine {
             .iter()
             .map(|v| match v {
                 Value::Imm(n) => format!("Imm<{}>", n).green().to_string(),
-                Value::Ref(addr) => format!("Ref<0x{:x}>", addr).bright_cyan().to_string(),
+                Value::Ref(addr) => format!("Ref<0x{:X}>", addr).bright_cyan().to_string(),
+                Value::StackRef { local_index, .. } => format!("StackRef<0x{:X}>", local_index)
+                    .bright_blue()
+                    .to_string(),
             })
             .collect();
 
@@ -253,13 +256,6 @@ impl VirtualMachine {
 
                 addr += size;
             } else {
-                if self.debug {
-                    eprintln!(
-                        "  {} Invalid header at {} (fragmentation)",
-                        "[WARN]".yellow(),
-                        Fmt::addr(addr)
-                    );
-                }
                 addr += 1;
             }
         }

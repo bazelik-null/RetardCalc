@@ -1,7 +1,7 @@
 use crate::core::compiler::parser::symbol::{ScopeStack, Symbol};
 use crate::core::compiler::parser::tree::Node;
 use crate::core::compiler::parser::type_inference::{
-    infer_binary_type, infer_literal_type, infer_unary_type,
+    infer_binary_type, infer_literal_type, infer_unary_type, types_compatible,
 };
 use crate::core::compiler::preprocessor::token::LiteralValue;
 use crate::core::shared::types::Type;
@@ -87,6 +87,27 @@ impl<'a> SemanticAnalyzer<'a> {
             Node::Return(val) => self.analyze_return(val),
             Node::ArrayLiteral(elements) => self.analyze_array_literal(elements),
             Node::ArrayAccess { array, index } => self.analyze_array_access(array, index),
+            Node::Reference {
+                value: inner,
+                mutable,
+            } => self.analyze_reference(inner, *mutable),
+            Node::Dereference(inner) => self.analyze_dereference(inner),
+        }
+    }
+
+    fn is_lvalue(&self, node: &Node) -> bool {
+        matches!(
+            node,
+            Node::Identifier(_) | Node::ArrayAccess { .. } | Node::Dereference(_) // Dereferenced pointers are lvalues
+        )
+    }
+
+    fn validate_lvalue(&mut self, node: &Node) -> Result<(), ()> {
+        if !self.is_lvalue(node) {
+            self.error(format!("Cannot take reference of non-lvalue: {:?}", node));
+            Err(())
+        } else {
+            Ok(())
         }
     }
 
@@ -97,6 +118,55 @@ impl<'a> SemanticAnalyzer<'a> {
             .ok_or_else(|| {
                 self.error(format!("Undefined variable: {}", self.resolve_name(&name)));
             })
+    }
+
+    fn analyze_reference(&mut self, inner: &mut Box<Node>, mutable: bool) -> Result<Type, ()> {
+        // Validate lvalue first
+        self.validate_lvalue(inner)?;
+
+        let inner_type = self.analyze_node(inner)?;
+
+        // Check mutability constraints
+        if mutable {
+            // Reject mutable ref to immutable ref
+            if matches!(inner_type, Type::Reference(_)) {
+                self.error("Cannot create mutable reference to immutable reference".to_string());
+                return Err(());
+            }
+
+            // Mutable references require the target to be mutable
+            if let Node::Identifier(name) = inner.as_ref()
+                && let Some(symbol) = self.scope_stack.lookup(*name)
+                && !symbol.mutable
+            {
+                self.error(format!(
+                    "Cannot create mutable reference to immutable variable: {}",
+                    self.resolve_name(name)
+                ));
+                return Err(());
+            }
+            Ok(Type::MutableReference(Box::new(inner_type)))
+        } else {
+            Ok(Type::Reference(Box::new(inner_type)))
+        }
+    }
+
+    fn analyze_dereference(&mut self, inner: &mut Box<Node>) -> Result<Type, ()> {
+        let inner_type = self.analyze_node(inner)?;
+
+        match inner_type {
+            Type::Reference(pointee) | Type::MutableReference(pointee) => {
+                // Strip one level of reference
+                Ok(*pointee)
+            }
+            _ => {
+                self.error(format!(
+                    "Cannot dereference non-reference type: {}",
+                    inner_type
+                ));
+                Err(())
+            }
+        }
     }
 
     fn analyze_array_literal(&mut self, elements: &mut [Node]) -> Result<Type, ()> {
@@ -110,7 +180,7 @@ impl<'a> SemanticAnalyzer<'a> {
         // Validate all elements have same type
         for (i, elem) in elements.iter_mut().enumerate().skip(1) {
             let elem_type = self.analyze_node(elem)?;
-            if !self.types_compatible(&elem_type, &first_type) {
+            if !types_compatible(&elem_type, &first_type) {
                 self.error(format!(
                     "Array element type mismatch at index {}: expected {}, got {}",
                     i, first_type, elem_type
@@ -194,7 +264,7 @@ impl<'a> SemanticAnalyzer<'a> {
         }
 
         // Ensure value type matches declared type
-        if !self.types_compatible(&value_type, &declared_type) {
+        if !types_compatible(&value_type, &declared_type) {
             self.error(format!(
                 "Type mismatch: expected {}, got {}",
                 declared_type, value_type
@@ -222,13 +292,36 @@ impl<'a> SemanticAnalyzer<'a> {
         let value_type = self.analyze_node(value)?;
 
         match target.as_mut() {
+            Node::Dereference(ref_expr) => {
+                let ref_type = self.analyze_node(ref_expr)?;
+
+                match ref_type {
+                    Type::MutableReference(pointee) => {
+                        if !types_compatible(&value_type, &pointee) {
+                            self.error(format!(
+                                "Type mismatch in dereferenced assignment: expected {}, got {}",
+                                pointee, value_type
+                            ));
+                            return Err(());
+                        }
+                        Ok(*pointee)
+                    }
+                    Type::Reference(_) => {
+                        self.error("Cannot assign through immutable reference".to_string());
+                        Err(())
+                    }
+                    _ => {
+                        self.error(format!("Cannot dereference for assignment: {}", ref_type));
+                        Err(())
+                    }
+                }
+            }
+
             Node::Identifier(name) => {
-                // Look up target variable
                 let symbol = self.scope_stack.lookup(*name).ok_or_else(|| {
                     self.error(format!("Undefined variable: {}", self.resolve_name(name)));
                 })?;
 
-                // Prevent reassignment of immutable variables
                 if !symbol.mutable {
                     self.error(format!(
                         "Cannot assign to immutable variable: {}",
@@ -237,8 +330,7 @@ impl<'a> SemanticAnalyzer<'a> {
                     return Err(());
                 }
 
-                // Check value type matches variable type
-                if !self.types_compatible(&value_type, &symbol.type_annotation) {
+                if !types_compatible(&value_type, &symbol.type_annotation) {
                     self.error(format!(
                         "Type mismatch in assignment: expected {}, got {}",
                         symbol.type_annotation, value_type
@@ -248,8 +340,8 @@ impl<'a> SemanticAnalyzer<'a> {
 
                 Ok(symbol.type_annotation.clone())
             }
+
             Node::ArrayAccess { array, index } => {
-                // Check if the array variable itself is mutable
                 if let Node::Identifier(arr_name) = array.as_ref() {
                     let symbol = self.scope_stack.lookup(*arr_name).ok_or_else(|| {
                         self.error(format!(
@@ -267,11 +359,9 @@ impl<'a> SemanticAnalyzer<'a> {
                     }
                 }
 
-                // Validate array access is valid
                 let element_type = self.analyze_array_access(array, index)?;
 
-                // Value type must match element type
-                if !self.types_compatible(&value_type, &element_type) {
+                if !types_compatible(&value_type, &element_type) {
                     self.error(format!(
                         "Type mismatch in array assignment: expected {}, got {}",
                         element_type, value_type
@@ -281,6 +371,7 @@ impl<'a> SemanticAnalyzer<'a> {
 
                 Ok(element_type)
             }
+
             _ => {
                 self.error("Invalid assignment target".to_string());
                 Err(())
@@ -348,7 +439,7 @@ impl<'a> SemanticAnalyzer<'a> {
         // Both branches type must match if both exist
         match (else_type, then_type.clone()) {
             (Some(else_t), then_t) => {
-                if self.types_compatible(&else_t, &then_t) {
+                if types_compatible(&else_t, &then_t) {
                     Ok(then_t)
                 } else {
                     self.error(format!(
@@ -399,7 +490,7 @@ impl<'a> SemanticAnalyzer<'a> {
                 // Validate last expression matches function return type
                 if is_last && self.current_return_type.is_some() {
                     let expected = self.current_return_type.as_ref().unwrap();
-                    if !self.types_compatible(&t, expected) {
+                    if !types_compatible(&t, expected) {
                         self.error(format!(
                             "Implicit return type mismatch: expected {}, got {}",
                             expected, t
@@ -452,7 +543,7 @@ impl<'a> SemanticAnalyzer<'a> {
 
         // Validate body type matches declared return type
         if let Some(expected) = return_type
-            && !self.types_compatible(&body_type, expected)
+            && !types_compatible(&body_type, expected)
         {
             self.error(format!(
                 "Function return type mismatch: expected {}, got {}",
@@ -469,7 +560,7 @@ impl<'a> SemanticAnalyzer<'a> {
 
     fn analyze_func_call(&mut self, node: &mut Node) -> Result<Type, ()> {
         let (name, args) = match node {
-            Node::FunctionCall { name, args } => (name, args),
+            Node::FunctionCall { name, args, .. } => (name, args),
             _ => return Err(()),
         };
 
@@ -505,7 +596,7 @@ impl<'a> SemanticAnalyzer<'a> {
         // Validate each argument type with bounds checking
         for (i, (arg, expected_type)) in args.iter_mut().zip(param_types.iter()).enumerate() {
             let arg_type = self.analyze_node(arg)?;
-            if !self.types_compatible(&arg_type, expected_type) {
+            if !types_compatible(&arg_type, expected_type) {
                 self.error(format!(
                     "Argument {} type mismatch for {}: expected {}, got {}",
                     i,
@@ -521,10 +612,9 @@ impl<'a> SemanticAnalyzer<'a> {
         Ok(return_type.unwrap_or(Type::Void))
     }
 
-    // todo: proper syscalls
     fn analyze_syscall(&mut self, node: &mut Node) -> Result<Type, ()> {
         let (id, _args) = match node {
-            Node::SysCall { id, args } => (id, args),
+            Node::SysCall { id, args, .. } => (id, args),
             _ => return Err(()),
         };
 
@@ -538,7 +628,7 @@ impl<'a> SemanticAnalyzer<'a> {
                 let return_type = self.analyze_node(val)?;
                 // Check type matches function's expected return type
                 if let Some(expected) = &self.current_return_type
-                    && !self.types_compatible(&return_type, expected)
+                    && !types_compatible(&return_type, expected)
                 {
                     self.error(format!(
                         "Return type mismatch: expected {}, got {}",
@@ -579,19 +669,5 @@ impl<'a> SemanticAnalyzer<'a> {
 
     fn resolve_name(&self, spur: &Spur) -> &str {
         self.rodeo.resolve(spur)
-    }
-
-    fn types_compatible(&self, actual: &Type, expected: &Type) -> bool {
-        match (actual, expected) {
-            (a, b) if a == b => true,
-            (Type::Integer, Type::Float) => true,
-            // FixedArray can be assigned to dynamic Array
-            (Type::FixedArray(actual_inner, _), Type::Array(expected_inner)) => {
-                self.types_compatible(actual_inner, expected_inner)
-            }
-            // Dynamic Array cannot be assigned to FixedArray
-            (Type::Array(_), Type::FixedArray(_, _)) => false,
-            _ => false,
-        }
     }
 }

@@ -50,7 +50,7 @@ impl VirtualMachine {
             ]) as usize;
 
             // Validate total size
-            if total_size < 16 + 16 + 4 {
+            if total_size < 16 {
                 return Err(VmError::InvalidExecutable);
             }
 
@@ -60,7 +60,7 @@ impl VirtualMachine {
 
             // Load the object
             self.memory
-                .load_from_executable(&data[offset..offset + total_size], true)?;
+                .load_from_executable(&data[offset..offset + total_size], false)?;
 
             offset += total_size;
         }
@@ -108,15 +108,15 @@ impl VirtualMachine {
                 self.push_ref(addr)?;
             }
             Opcode::PUSH_LOCAL_REF => {
-                let idx = instr.operand as usize;
-                let value = self.memory.get_local(idx)?;
-                self.memory.push(value)?;
+                let local_index = instr.operand as usize;
+                let stack_ref = self.memory.create_stack_ref(local_index)?;
+                self.memory.push(stack_ref)?;
             }
             Opcode::POP => {
                 self.memory.pop()?;
             }
             Opcode::DUP => {
-                let value = self.peek_val()?;
+                let value = self.memory.peek()?;
                 self.memory.push(value)?;
             }
             Opcode::SWAP => {
@@ -158,10 +158,39 @@ impl VirtualMachine {
 
             // Memory operations
             Opcode::LOAD => {
-                self.op_load()?;
+                let value = self.memory.pop()?;
+                match value {
+                    Value::StackRef {
+                        frame_index,
+                        local_index,
+                    } => {
+                        let resolved = self
+                            .memory
+                            .dereference_stack_ref(frame_index, local_index)?;
+                        self.memory.push(resolved)?;
+                    }
+                    Value::Ref(_) => self.op_load(value.as_ref()?)?,
+                    other => {
+                        // Not a reference, push as-is
+                        self.memory.push(other)?;
+                    }
+                }
             }
             Opcode::STORE => {
-                self.op_store()?;
+                let value = self.memory.pop()?;
+                let reference = self.memory.pop()?;
+
+                match reference {
+                    Value::StackRef {
+                        frame_index,
+                        local_index,
+                    } => {
+                        self.memory
+                            .set_through_stack_ref(frame_index, local_index, value)?;
+                    }
+                    Value::Ref(_) => self.op_store(value, reference.as_ref()?)?,
+                    _ => return Err(VmError::InvalidReference(0)),
+                };
             }
             Opcode::LOAD_LOCAL => {
                 let idx = instr.operand as usize;
@@ -277,6 +306,15 @@ impl VirtualMachine {
                     )),
                 }
             }
+            Value::StackRef {
+                frame_index,
+                local_index,
+            } => {
+                let data = self
+                    .memory
+                    .dereference_stack_ref(frame_index, local_index)?;
+                data.as_num()
+            }
         }
     }
 
@@ -308,6 +346,15 @@ impl VirtualMachine {
                 }
             }
             Value::Imm(i) => Ok(i.to_string()),
+            Value::StackRef {
+                frame_index,
+                local_index,
+            } => {
+                let data = self
+                    .memory
+                    .dereference_stack_ref(*frame_index, *local_index)?;
+                self.value_to_string(&data)
+            }
         }
     }
 
@@ -336,15 +383,5 @@ impl VirtualMachine {
 
     fn push_ref(&mut self, addr: usize) -> Result<(), VmError> {
         self.memory.push(Value::Ref(addr))
-    }
-
-    fn pop_ref(&mut self) -> Result<usize, VmError> {
-        let val = self.memory.pop()?;
-        let addr = val.as_ref()?;
-        Ok(addr)
-    }
-
-    fn peek_val(&self) -> Result<Value, VmError> {
-        self.memory.peek()
     }
 }

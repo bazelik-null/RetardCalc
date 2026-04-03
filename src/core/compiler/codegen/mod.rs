@@ -163,7 +163,7 @@ impl<'a> CodeGenerator<'a> {
     }
 
     /// Allocate data and request relocation for the next instruction.
-    /// Layout: `[Header (16 bytes) | RTTI (fixed) | Data length (4 bytes) | Data (variable)]`
+    /// Layout: `[Header [Size (4 bytes) | RTTI (8 bytes) | Data length (4 bytes)] | Data (variable)]`
     fn insert_data<T: AsRef<[u8]>>(&mut self, value: T, rtti: Type) -> Result<(), String> {
         let bytes = value.as_ref();
         let rtti_bytes = rtti.to_bytes();
@@ -180,18 +180,13 @@ impl<'a> CodeGenerator<'a> {
         // Build the complete data block with header
         let mut data_block = Vec::new();
 
-        // Calculate total size: header + RTTI + data_len (4 bytes) + data
-        let total_size = 16 + 16 + 4 + bytes.len();
+        // Calculate total size: header (16 bytes) + data
+        let total_size = 16 + bytes.len();
 
-        // Write header (16 bytes)
-        data_block.extend_from_slice(&(total_size as u32).to_le_bytes());
-        data_block.extend_from_slice(&[0u8; 12]);
-
-        // Write RTTI (16 bytes)
-        data_block.extend_from_slice(&rtti_bytes);
-
-        // Write data length (4 bytes)
-        data_block.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        // Write header
+        data_block.extend_from_slice(&(total_size as u32).to_le_bytes()); // Size (4 bytes)
+        data_block.extend_from_slice(&rtti_bytes); // RTTI (8 bytes)
+        data_block.extend_from_slice(&(bytes.len() as u32).to_le_bytes()); // Data length (4 bytes)
 
         // Write data (variable)
         data_block.extend_from_slice(bytes);

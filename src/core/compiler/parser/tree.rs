@@ -35,6 +35,11 @@ pub enum Node {
     // Expressions
     Literal(LiteralValue),
     ArrayLiteral(Vec<Node>),
+    Reference {
+        value: Box<Node>,
+        mutable: bool,
+    },
+    Dereference(Box<Node>),
     Identifier(Spur),
     Unary {
         op: OperatorValue,

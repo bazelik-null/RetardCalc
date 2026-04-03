@@ -11,12 +11,13 @@ pub enum Type {
     FixedArray(Box<Type>, usize), // 0x5
     Void,                         // 0x6
     Reference(Box<Type>),         // 0x7
+    MutableReference(Box<Type>),  // 0x8
 }
 
 impl Type {
-    /// Serializes the Type into a 16-byte RTTI
-    pub fn to_bytes(&self) -> [u8; 16] {
-        let mut bytes = [0u8; 16];
+    /// Serializes the Type into an 8-byte RTTI
+    pub fn to_bytes(&self) -> [u8; 8] {
+        let mut bytes = [0u8; 8];
         self.serialize_into(&mut bytes, 0);
         bytes
     }
@@ -52,15 +53,11 @@ impl Type {
                 offset += 1;
                 offset += inner.serialize_into(bytes, offset);
             }
-            Type::FixedArray(inner, size) => {
+            Type::FixedArray(inner, _size) => {
                 bytes[offset] = 0x5;
                 offset += 1;
+                // Don't store size—serialize only the element type
                 offset += inner.serialize_into(bytes, offset);
-                // Serialize the size as 8 bytes (u64)
-                if offset + 8 <= bytes.len() {
-                    bytes[offset..offset + 8].copy_from_slice(&size.to_le_bytes());
-                    offset += 8;
-                }
             }
             Type::Void => {
                 bytes[offset] = 0x6;
@@ -68,6 +65,11 @@ impl Type {
             }
             Type::Reference(inner) => {
                 bytes[offset] = 0x7;
+                offset += 1;
+                offset += inner.serialize_into(bytes, offset);
+            }
+            Type::MutableReference(inner) => {
+                bytes[offset] = 0x8;
                 offset += 1;
                 offset += inner.serialize_into(bytes, offset);
             }
@@ -94,20 +96,17 @@ impl Type {
             }
             0x5 => {
                 let (inner, consumed) = Type::from_bytes(&bytes[1..])?;
-                let size_start = 1 + consumed;
-                if bytes.len() < size_start + 8 {
-                    return Err("Not enough bytes for FixedArray size".to_string());
-                }
-                let size_bytes: [u8; 8] = bytes[size_start..size_start + 8]
-                    .try_into()
-                    .map_err(|_| "Failed to parse size".to_string())?;
-                let size = usize::from_le_bytes(size_bytes);
-                Ok((Type::FixedArray(Box::new(inner), size), size_start + 8))
+                // FixedArray without size—you'll need to track size separately
+                Ok((Type::FixedArray(Box::new(inner), 0), 1 + consumed))
             }
             0x6 => Ok((Type::Void, 1)),
             0x7 => {
                 let (inner, consumed) = Type::from_bytes(&bytes[1..])?;
                 Ok((Type::Reference(Box::new(inner)), 1 + consumed))
+            }
+            0x8 => {
+                let (inner, consumed) = Type::from_bytes(&bytes[1..])?;
+                Ok((Type::MutableReference(Box::new(inner)), 1 + consumed))
             }
             _ => Err(format!("Unknown type tag: {}", bytes[0])),
         }
@@ -125,8 +124,11 @@ impl Type {
             Type::Reference(_) => {
                 vec![0] // Reference itself is the pointer
             }
+            Type::MutableReference(_) => {
+                vec![0] // Reference itself is the pointer
+            }
             Type::Array(_) => {
-                // Array layout: [length: u32][capacity: u32][ptr: u64]
+                // Array layout: [length: u32][capacity: u32][ptr: u32]
                 vec![8] // Pointer at offset 8
             }
             Type::FixedArray(element_type, size) => {
@@ -151,6 +153,7 @@ impl Type {
     pub fn contains_references(&self) -> bool {
         match self {
             Type::Reference(_) => true,
+            Type::MutableReference(_) => true,
             Type::Array(inner) | Type::FixedArray(inner, _) => inner.contains_references(),
             _ => false,
         }
@@ -160,10 +163,11 @@ impl Type {
         match self {
             Type::Integer => 4,
             Type::Float => 4,
-            Type::Boolean => 1,
+            Type::Boolean => 4,
             Type::String => 0, // Variable length, stored as data not in type
-            Type::Reference(_) => 8,
-            Type::Array(_) => 16, // [len:4][cap:4][ptr:8]
+            Type::Reference(_) => 4,
+            Type::MutableReference(_) => 4,
+            Type::Array(_) => 12, // [len:4][cap:4][ptr:4]
             Type::FixedArray(element_type, size) => element_type.size_in_bytes() * size,
             Type::Void => 0,
         }
@@ -181,6 +185,7 @@ impl fmt::Display for Type {
             Type::FixedArray(inner, size) => write!(f, "[{}: {}]", inner, size),
             Type::Void => write!(f, "void"),
             Type::Reference(inner) => write!(f, "ref {}", inner),
+            Type::MutableReference(inner) => write!(f, "mut ref {}", inner),
         }
     }
 }

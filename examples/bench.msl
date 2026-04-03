@@ -1,0 +1,50 @@
+func float_workload(): float {
+    let mut x: float = 1.0001;
+    let mut i: int = 0;
+    while (i < 100) {
+        // Power operations
+        x = x ^ 1.5;
+        x = x + (x ^ 0.5);
+
+        // Division operations
+        x = x / (x + 0.001);
+        x = x / (x + 0.0001);
+        x = x / (x + 0.00001);
+
+        // Newton's method for square root (iterative)
+        let mut y: float = x;
+        let mut k: int = 0;
+        while (k < 5) {
+            y = 0.5 * (y + (2.0 / y));
+            k = k + 1;
+        }
+        x = y;
+
+        // Modulo and multiply
+        x = x * 1.0000001;
+        x = x * 1.00000001;
+        x = x * 1.000000001;
+
+        // More divisions
+        x = x / 1.0000001;
+        x = x / 1.00000001;
+        x = x / 1.000000001;
+
+        // Trigonometric approximation
+        x = x - (x ^ 3.0) / 6.0 + (x ^ 5.0) / 120.0;
+
+        i = i + 1;
+    }
+    x
+}
+
+func main() {
+    let mut sum: float = 0.0;
+    let mut x: int = 0;
+    while (x < 1000) {
+        sum = sum + float_workload();
+        x = x + 1;
+    }
+
+    println(sum);
+}

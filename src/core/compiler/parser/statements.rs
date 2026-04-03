@@ -1,5 +1,5 @@
-use crate::core::compiler::parser::Parser;
 use crate::core::compiler::parser::tree::{Node, Parameter};
+use crate::core::compiler::parser::Parser;
 use crate::core::compiler::preprocessor::token::{
     KeywordValue, LiteralValue, SyntaxValue, TokenType,
 };
@@ -185,32 +185,39 @@ impl<'a> Parser<'a> {
         Ok(Node::Block(statements))
     }
 
-    fn parse_array_size(&mut self) -> Result<usize, ()> {
-        match self.peek_token_type()? {
-            TokenType::Literal(LiteralValue::Integer(n)) => {
-                self.advance();
-                if n <= 0 {
-                    self.error("Array size must be positive", *self.peek().unwrap());
-                    return Err(());
-                }
-                Ok(n as usize)
+    fn parse_type(&mut self) -> Result<Type, ()> {
+        // Check for reference prefix
+        let is_reference = self.match_keyword(KeywordValue::Reference);
+
+        // Check if mutable
+        let mutable = if is_reference {
+            self.match_keyword(KeywordValue::Mutable)
+        } else {
+            false
+        };
+
+        // Parse the base type
+        let base_type = self.parse_base_type()?;
+
+        // Wrap in Reference if needed
+        let result_type = if is_reference {
+            match mutable {
+                true => Type::MutableReference(Box::new(base_type)),
+                false => Type::Reference(Box::new(base_type)),
             }
-            _ => {
-                let token = self.peek().cloned().ok_or(())?;
-                self.error(
-                    &format!(
-                        "Expected positive integer for array size, found {:?}",
-                        token.token_type
-                    ),
-                    token,
-                );
-                Err(())
-            }
-        }
+        } else {
+            base_type
+        };
+
+        Ok(result_type)
     }
 
-    fn parse_type(&mut self) -> Result<Type, ()> {
-        match self.peek_token_type()? {
+    fn parse_base_type(&mut self) -> Result<Type, ()> {
+        let token = self.peek().cloned().ok_or_else(|| {
+            self.error_at_current("Unexpected end of input");
+        })?;
+
+        match token.token_type {
             TokenType::Keyword(KeywordValue::Integer) => {
                 self.advance();
                 Ok(Type::Integer)
@@ -227,28 +234,43 @@ impl<'a> Parser<'a> {
                 self.advance();
                 Ok(Type::String)
             }
+            TokenType::Keyword(KeywordValue::Void) => {
+                self.advance();
+                Ok(Type::Void)
+            }
             TokenType::Syntax(SyntaxValue::LBracket) => {
                 self.advance();
+
+                // Check for fixed-size array: [T; size]
                 let inner_type = self.parse_type()?;
 
-                // Check for fixed array syntax: [type: n]
-                if self.match_syntax(SyntaxValue::Colon) {
-                    // Parse the size
-                    let size = self.parse_array_size()?;
+                if self.match_syntax(SyntaxValue::Semicolon) {
+                    // Fixed array
+                    let size_token = self.peek().cloned().ok_or_else(|| {
+                        self.error_at_current("Expected array size");
+                    })?;
+
+                    let size = match size_token.token_type {
+                        TokenType::Literal(LiteralValue::Integer(n)) => {
+                            self.advance();
+                            n as usize
+                        }
+                        _ => {
+                            self.error("Expected integer literal for array size", size_token);
+                            return Err(());
+                        }
+                    };
+
                     self.expect_syntax(SyntaxValue::RBracket)?;
                     Ok(Type::FixedArray(Box::new(inner_type), size))
                 } else {
-                    // Dynamic array: [type]
+                    // Dynamic array
                     self.expect_syntax(SyntaxValue::RBracket)?;
                     Ok(Type::Array(Box::new(inner_type)))
                 }
             }
             _ => {
-                let token = self.peek().cloned().ok_or(())?;
-                self.error(
-                    &format!("Expected type, found {:?}", token.token_type),
-                    token,
-                );
+                self.error("Expected type", token);
                 Err(())
             }
         }

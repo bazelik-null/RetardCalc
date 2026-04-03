@@ -1,4 +1,4 @@
-// Test file
+// Stress test for garbage collector
 
 func main() {
     let msg = "Hello";

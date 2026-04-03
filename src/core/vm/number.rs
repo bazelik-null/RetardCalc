@@ -142,20 +142,38 @@ impl Display for Number {
 pub enum Value {
     Imm(Number),
     Ref(usize),
+    StackRef {
+        frame_index: usize,
+        local_index: usize,
+    },
 }
 
 impl Value {
     pub fn as_num(&self) -> Result<Number, VmError> {
         match self {
             Value::Imm(i) => Ok(*i),
-            Value::Ref(_) => Err(VmError::TypeMismatch("reference", "integer".to_string())),
+            Value::Ref(_) => Err(VmError::TypeMismatch(
+                "reference".to_string(),
+                "integer".to_string(),
+            )),
+            Value::StackRef { .. } => Err(VmError::TypeMismatch(
+                "reference".to_string(),
+                "integer".to_string(),
+            )),
         }
     }
 
     pub fn as_ref(&self) -> Result<usize, VmError> {
         match self {
             Value::Ref(addr) => Ok(*addr),
-            Value::Imm(_) => Err(VmError::TypeMismatch("immediate", "reference".to_string())),
+            Value::StackRef { .. } => Err(VmError::TypeMismatch(
+                "stack reference".to_string(),
+                "reference".to_string(),
+            )),
+            Value::Imm(_) => Err(VmError::TypeMismatch(
+                "immediate".to_string(),
+                "reference".to_string(),
+            )),
         }
     }
 

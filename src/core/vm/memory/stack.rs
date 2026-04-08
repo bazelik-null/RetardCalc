@@ -136,28 +136,7 @@ impl Memory {
         Ok(())
     }
 
-    /// Check if a stack reference is still valid
-    pub fn is_stack_ref_valid(&self, frame_index: usize, local_index: usize) -> bool {
-        frame_index < self.call_stack.len()
-            && local_index < self.call_stack[frame_index].locals.len()
-    }
-
-    /// Dereference any value that might be a stack reference
-    pub fn resolve_value(&self, value: Value) -> Result<Value, VmError> {
-        match value {
-            Value::StackRef {
-                frame_index,
-                local_index,
-            } => {
-                if !self.is_stack_ref_valid(frame_index, local_index) {
-                    return Err(VmError::InvalidReference(frame_index));
-                }
-                self.dereference_stack_ref(frame_index, local_index)
-            }
-            other => Ok(other),
-        }
-    }
-
+    #[allow(unused)]
     pub fn peek_stack(&self) -> &[Value] {
         &self.operand_stack
     }

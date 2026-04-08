@@ -1,10 +1,9 @@
 #![allow(clippy::result_unit_err)]
-pub mod analyzer;
+
+mod analyzer;
 mod expressions;
 mod statements;
-pub mod symbol;
 pub mod tree;
-pub mod type_inference;
 
 use crate::core::compiler::error_handler::CompilerError;
 use crate::core::compiler::parser::analyzer::SemanticAnalyzer;

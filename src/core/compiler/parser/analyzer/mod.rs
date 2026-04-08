@@ -1,8 +1,11 @@
-use crate::core::compiler::parser::symbol::{ScopeStack, Symbol};
-use crate::core::compiler::parser::tree::Node;
-use crate::core::compiler::parser::type_inference::{
+mod symbol;
+mod type_inference;
+
+use crate::core::compiler::parser::analyzer::symbol::{ScopeStack, Symbol};
+use crate::core::compiler::parser::analyzer::type_inference::{
     infer_binary_type, infer_literal_type, infer_unary_type, types_compatible,
 };
+use crate::core::compiler::parser::tree::Node;
 use crate::core::compiler::preprocessor::token::LiteralValue;
 use crate::core::shared::types::Type;
 use lasso::{Rodeo, Spur};
@@ -291,7 +294,6 @@ impl<'a> SemanticAnalyzer<'a> {
             name: *name,
             type_annotation: declared_type.clone(),
             mutable: *mutable,
-            scope_level: self.scope_stack.current_level(),
         });
 
         Ok(declared_type)
@@ -555,7 +557,6 @@ impl<'a> SemanticAnalyzer<'a> {
                 name: param.name,
                 type_annotation: param.type_annotation.clone(),
                 mutable: true,
-                scope_level: self.scope_stack.current_level(),
             });
         }
 

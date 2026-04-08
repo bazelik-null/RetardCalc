@@ -5,10 +5,10 @@ use crate::core::vm::error::VmError;
 use crate::core::vm::memory::Memory;
 use crate::core::vm::number::{Number, Value};
 
-pub mod error;
-pub mod memory;
-pub mod number;
-pub mod operators;
+mod error;
+mod memory;
+mod number;
+mod operators;
 
 #[cfg(feature = "vm_debug")]
 pub mod debug;

@@ -1,4 +1,4 @@
-pub mod generator;
+mod generator;
 
 use crate::core::compiler::linker::Linker;
 use crate::core::compiler::parser::tree::Node;

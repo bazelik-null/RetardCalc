@@ -7,20 +7,17 @@ pub struct Symbol {
     pub name: Spur,
     pub type_annotation: Type,
     pub mutable: bool,
-    pub scope_level: usize,
 }
 
 #[derive(Clone)]
 pub struct Scope {
     pub symbols: HashMap<Spur, Symbol>,
-    pub level: usize,
 }
 
 impl Scope {
-    pub fn new(level: usize) -> Self {
+    pub fn new() -> Self {
         Self {
             symbols: HashMap::new(),
-            level,
         }
     }
 
@@ -40,13 +37,12 @@ pub struct ScopeStack {
 impl ScopeStack {
     pub fn new() -> Self {
         Self {
-            scopes: vec![Scope::new(0)],
+            scopes: vec![Scope::new()],
         }
     }
 
     pub fn push(&mut self) {
-        let level = self.scopes.len();
-        self.scopes.push(Scope::new(level));
+        self.scopes.push(Scope::new());
     }
 
     pub fn pop(&mut self) {
@@ -69,10 +65,6 @@ impl ScopeStack {
             }
         }
         None
-    }
-
-    pub fn current_level(&self) -> usize {
-        self.scopes.len().saturating_sub(1)
     }
 }
 

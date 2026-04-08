@@ -1,4 +1,4 @@
-pub mod garbage_collector;
+mod garbage_collector;
 pub mod stack;
 
 use crate::core::vm::error::VmError;
@@ -93,6 +93,7 @@ impl Memory {
     // OBJECTS
     //
 
+    #[allow(unused)]
     /// Validate object header
     pub fn is_valid_object_header(&self, base: usize) -> bool {
         if base >= self.heap.len() || base + 16 > self.heap.len() {

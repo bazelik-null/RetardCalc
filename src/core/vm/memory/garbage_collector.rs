@@ -7,6 +7,7 @@ use std::collections::HashSet;
 const MAX_TRACE_ITERATIONS: usize = 1_000_000;
 
 impl Memory {
+    #[allow(unused)]
     /// Check if object is marked for collection
     pub fn is_marked(&self, addr: usize) -> Result<bool, VmError> {
         self.object_registry
@@ -25,6 +26,7 @@ impl Memory {
         }
     }
 
+    #[allow(unused)]
     /// Check if object is static
     pub fn is_static(&self, addr: usize) -> Result<bool, VmError> {
         self.object_registry

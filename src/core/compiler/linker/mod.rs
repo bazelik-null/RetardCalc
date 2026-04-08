@@ -5,7 +5,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Copy)]
 pub enum Symbol {
     Label { offset: usize },
-    DataSection { offset: usize, size: usize },
+    DataSection { offset: usize },
 }
 
 /// Tracks symbols during the linking phase.
@@ -38,17 +38,11 @@ impl SymbolTable {
         Ok(())
     }
 
-    pub fn define_data_section(
-        &mut self,
-        id: Operand,
-        offset: usize,
-        size: usize,
-    ) -> Result<(), String> {
+    pub fn define_data_section(&mut self, id: Operand, offset: usize) -> Result<(), String> {
         if self.symbols.contains_key(&id) {
             return Err(format!("Symbol already defined: {:?}", id));
         }
-        self.symbols
-            .insert(id, Symbol::DataSection { offset, size });
+        self.symbols.insert(id, Symbol::DataSection { offset });
         Ok(())
     }
 
@@ -57,10 +51,6 @@ impl SymbolTable {
             .get(&symbol)
             .copied()
             .ok_or_else(|| format!("Unresolved symbol: {:?}", symbol))
-    }
-
-    pub fn has(&self, symbol: Operand) -> bool {
-        self.symbols.contains_key(&symbol)
     }
 }
 
@@ -108,14 +98,6 @@ impl RelocationQueue {
     pub fn entries(&self) -> &[UnresolvedRelocation] {
         &self.relocations
     }
-
-    pub fn count(&self) -> usize {
-        self.relocations.len()
-    }
-
-    pub fn clear(&mut self) {
-        self.relocations.clear();
-    }
 }
 
 impl Default for RelocationQueue {
@@ -159,8 +141,7 @@ impl Linker {
 
     pub fn allocate_data(&mut self, id: Operand, bytes: &[u8]) -> Result<(), String> {
         let offset = self.data.len();
-        let size = bytes.len();
-        self.symbol_table.define_data_section(id, offset, size)?;
+        self.symbol_table.define_data_section(id, offset)?;
         self.data.extend_from_slice(bytes);
         Ok(())
     }
@@ -225,9 +206,5 @@ impl Linker {
             Symbol::Label { offset } => Ok(offset),
             Symbol::DataSection { offset, .. } => Ok(offset),
         }
-    }
-
-    pub fn symbol_table(&self) -> &SymbolTable {
-        &self.symbol_table
     }
 }

@@ -114,17 +114,17 @@ impl Number {
         }
     }
 
-    pub fn to_f32(&self) -> f32 {
+    pub fn to_f32(self) -> f32 {
         match self {
-            Number::Int(i) => *i as f32,
-            Number::Float(f) => *f,
+            Number::Int(i) => i as f32,
+            Number::Float(f) => f,
         }
     }
 
-    pub fn to_i32(&self) -> i32 {
+    pub fn to_i32(self) -> i32 {
         match self {
-            Number::Int(i) => *i,
-            Number::Float(f) => *f as i32,
+            Number::Int(i) => i,
+            Number::Float(f) => f as i32,
         }
     }
 }

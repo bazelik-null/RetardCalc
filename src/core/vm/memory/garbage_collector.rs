@@ -3,7 +3,6 @@ use crate::core::vm::error::VmError;
 use crate::core::vm::memory::Memory;
 use crate::core::vm::number::Value;
 use std::collections::HashSet;
-use std::time::Instant;
 
 const MAX_TRACE_ITERATIONS: usize = 1_000_000;
 
@@ -60,7 +59,6 @@ impl Memory {
     }
 
     pub fn collect_garbage(&mut self) -> Result<(), VmError> {
-        let gc_start = Instant::now();
         self.log_gc_start();
 
         // Phase 1: Mark reachable objects
@@ -72,7 +70,7 @@ impl Memory {
         // Optimize free list
         self.consolidate_free_list();
 
-        self.log_gc_completion(gc_start, marked_count, swept_count);
+        self.log_gc_completion(marked_count, swept_count);
         Ok(())
     }
 
@@ -215,15 +213,14 @@ impl Memory {
         ));
     }
 
-    fn log_gc_completion(&mut self, gc_start: Instant, marked_count: usize, swept_count: usize) {
-        let duration_ms = gc_start.elapsed().as_millis();
+    fn log_gc_completion(&mut self, marked_count: usize, swept_count: usize) {
         self.record_event(format!(
             "[GC]: Marked {} objects | Swept {} objects",
             marked_count, swept_count
         ));
         self.record_event(format!(
-            "[GC]: Completed: Heap used=0x{:06x}; Duration={}ms;",
-            self.next_free, duration_ms
+            "[GC]: Completed: Heap used=0x{:06x};",
+            self.next_free
         ));
     }
 }

@@ -4,7 +4,6 @@ pub mod stack;
 use crate::core::vm::error::VmError;
 use crate::core::vm::memory::stack::StackFrame;
 use crate::core::vm::number::Value;
-use colored::Colorize;
 use std::collections::HashMap;
 
 /// A free block record
@@ -70,7 +69,7 @@ impl Memory {
 
     fn record_event(&mut self, msg: String) {
         if self.debug {
-            println!("  {}", msg.blue());
+            println!("  {}", msg);
         }
     }
 

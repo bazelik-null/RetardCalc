@@ -5,12 +5,15 @@ use crate::core::vm::error::VmError;
 use crate::core::vm::memory::Memory;
 use crate::core::vm::number::{Number, Value};
 
-pub mod debug;
 pub mod error;
 pub mod memory;
 pub mod number;
 pub mod operators;
 
+#[cfg(feature = "vm_debug")]
+pub mod debug;
+
+#[allow(unused)]
 pub struct VirtualMachine {
     memory: Memory,
     pc: usize,

@@ -1,5 +1,5 @@
-use crate::core::compiler::parser::tree::Node;
 use crate::core::compiler::parser::Parser;
+use crate::core::compiler::parser::tree::Node;
 use crate::core::compiler::preprocessor::token::{
     KeywordValue, OperatorValue, SyntaxValue, TokenType,
 };

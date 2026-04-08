@@ -108,6 +108,24 @@ impl Opcode {
             _ => Err(format!("Invalid opcode: 0x{:02X}", byte)),
         }
     }
+
+    /// Whether this opcode carries an operand after the opcode.
+    pub fn has_operand(self) -> bool {
+        matches!(
+            self,
+            Opcode::PUSH_IMM
+                | Opcode::PUSH_FLOAT_IMM
+                | Opcode::PUSH_HEAP_REF
+                | Opcode::PUSH_LOCAL_REF
+                | Opcode::LOAD_LOCAL
+                | Opcode::STORE_LOCAL
+                | Opcode::JMP
+                | Opcode::JMPT
+                | Opcode::JMPF
+                | Opcode::CALL
+                | Opcode::SYSCALL
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -117,11 +135,14 @@ pub struct Instruction {
 }
 
 impl Instruction {
-    pub const SIZE: usize = 5; // 1 byte opcode + 4 bytes operand
-
     /// Create a new instruction with the given opcode and operand.
     pub fn new(opcode: Opcode, operand: Operand) -> Self {
         Instruction { opcode, operand }
+    }
+
+    /// Size in bytes when encoded (1 byte opcode + 4 bytes if opcode has operand).
+    pub fn size(&self) -> usize {
+        1 + if self.opcode.has_operand() { 4 } else { 0 }
     }
 
     /// f32 -> i32
@@ -135,49 +156,67 @@ impl Instruction {
         f32::from_bits(float_bits)
     }
 
-    /// Encode instruction to 5-byte fixed format.
-    pub fn encode(&self) -> [u8; 5] {
-        let mut bytes = [0u8; 5];
-        bytes[0] = self.opcode as u8;
-        bytes[1..5].copy_from_slice(&self.operand.to_le_bytes());
-        bytes
+    /// Encode instruction
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(1 + if self.opcode.has_operand() { 4 } else { 0 });
+        out.push(self.opcode as u8);
+        if self.opcode.has_operand() {
+            out.extend_from_slice(&self.operand.to_le_bytes());
+        }
+        out
     }
 
     /// Decode instruction from 5-byte fixed format.
-    pub fn decode(bytes: &[u8; 5]) -> Result<Self, String> {
+    pub fn decode(bytes: &[u8]) -> Result<(Self, usize), String> {
+        if bytes.is_empty() {
+            return Err("Empty byte slice".to_string());
+        }
         let opcode = Opcode::from_u8(bytes[0])?;
-        let operand = i32::from_le_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]) as Operand;
-
-        Ok(Instruction { opcode, operand })
+        let mut consumed = 1usize;
+        let operand = if opcode.has_operand() {
+            if bytes.len() < consumed + 4 {
+                return Err(format!(
+                    "Insufficient bytes for operand: need 4, have {}",
+                    bytes.len() - consumed
+                ));
+            }
+            let b = [
+                bytes[consumed],
+                bytes[consumed + 1],
+                bytes[consumed + 2],
+                bytes[consumed + 3],
+            ];
+            consumed += 4;
+            i32::from_le_bytes(b)
+        } else {
+            0
+        };
+        Ok((Instruction { opcode, operand }, consumed))
     }
 
     /// Serialize a vector of Instructions to a byte vector.
     pub fn serialize(instructions: &[Instruction]) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(instructions.len() * Self::SIZE);
-        for instruction in instructions {
-            bytes.extend_from_slice(&instruction.encode());
+        let mut bytes = Vec::new();
+        for instr in instructions {
+            bytes.extend_from_slice(&instr.encode());
         }
         bytes
     }
 
     /// Deserialize a byte vector into a vector of Instructions.
-    pub fn deserialize(bytes: &[u8]) -> Result<Vec<Instruction>, String> {
-        if !bytes.len().is_multiple_of(Self::SIZE) {
-            return Err(format!(
-                "Invalid bytecode length: {} bytes (must be a multiple of {})",
-                bytes.len(),
-                Self::SIZE
-            ));
+    pub fn deserialize(mut bytes: &[u8]) -> Result<Vec<Instruction>, String> {
+        let mut instructions = Vec::new();
+        while !bytes.is_empty() {
+            let (instr, consumed) = Instruction::decode(bytes)?;
+            instructions.push(instr);
+            bytes = &bytes[consumed..];
         }
-
-        let mut instructions = Vec::with_capacity(bytes.len() / Self::SIZE);
-        for chunk in bytes.chunks_exact(Self::SIZE) {
-            let mut instruction_bytes = [0u8; 5];
-            instruction_bytes.copy_from_slice(chunk);
-            instructions.push(Instruction::decode(&instruction_bytes)?);
-        }
-
         Ok(instructions)
+    }
+
+    /// Total serialized size for a slice of instructions.
+    pub fn serialized_size(instructions: &[Instruction]) -> usize {
+        instructions.iter().map(|instr| instr.size()).sum()
     }
 }
 

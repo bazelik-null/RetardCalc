@@ -40,7 +40,7 @@ pub struct Executable {
 
 impl Executable {
     pub fn new(instructions: Vec<Instruction>, entry_point: usize, data: Vec<u8>) -> Self {
-        let instructions_size = instructions.len() * Instruction::SIZE;
+        let instructions_size = Instruction::serialized_size(&instructions);
         let data_size = data.len();
 
         Executable {

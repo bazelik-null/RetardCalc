@@ -104,8 +104,8 @@ Function definition: add(x, y)
   RET               ; Return result
 
 Function call: result = add(10, 20)
-  PUSH 10           ; Push first argument
-  PUSH 20           ; Push second argument
+  PUSH_IMM 10       ; Push first argument
+  PUSH_IMM 20       ; Push second argument
   CALL add_label    ; Call function
   STORE_LOCAL 0     ; Store result in local variable
 ```
@@ -114,12 +114,16 @@ Function call: result = add(10, 20)
 
 ### Stack Manipulation
 
-| Instruction | Operand | Stack Effect       | Description                     |
-|-------------|---------|--------------------|---------------------------------|
-| **PUSH**    | imm     | `[] -> [imm]`      | Push immediate value onto stack |
-| **POP**     | none    | `[a] -> []`        | Pop and discard top value       |
-| **DUP**     | none    | `[a] -> [a, a]`    | Duplicate top value             |
-| **SWAP**    | none    | `[a, b] -> [b, a]` | Swap top two values             |
+| Instruction        | Operand | Stack Effect             | Description                            |
+|--------------------|---------|--------------------------|----------------------------------------|
+| **PUSH_IMM**       | imm     | `[] -> [imm]`            | Push immediate value onto stack        |
+| **PUSH_FLOAT_IMM** | imm     | `[] -> [imm]`            | Push f32 immediate value onto stack    |
+| **PUSH_HEAP_REF**  | imm     | `[] -> [addr]`           | Push reference to heap value (address) |
+| **PUSH_LOCAL_REF** | imm     | `[] -> [index]`          | Push reference to local variable       |
+| **POP**            | none    | `[a] -> []`              | Pop and discard top value              |
+| **DUP**            | none    | `[a] -> [a, a]`          | Duplicate top value                    |
+| **SWAP**           | none    | `[a, b] -> [b, a]`       | Swap top two values                    |
+| **ROT**            | none    | `[a, b, c] -> [c, a, b]` | Rotate top three values                |
 
 ### Arithmetic
 
@@ -139,7 +143,7 @@ Function call: result = add(10, 20)
 |-------------|---------|--------------------|-------------------------|
 | **AND**     | none    | `[a, b] -> [a&b]`  | Bitwise AND             |
 | **OR**      | none    | `[a, b] -> [a\|b]` | Bitwise OR              |
-| **XOR**     | none    | `[a, b] -> [a^b]`  | Bitwise XOR             |
+| **XOR**     | none    | `[a, b] -> [a^^b]` | Bitwise XOR             |
 | **NOT**     | none    | `[a] -> [~a]`      | Bitwise NOT             |
 | **SLA**     | none    | `[a, b] -> [a<<b]` | Left shift a by b bits  |
 | **SRA**     | none    | `[a, b] -> [a>>b]` | Right shift a by b bits |
@@ -176,10 +180,11 @@ Function call: result = add(10, 20)
 
 ### Misc
 
-| Instruction | Operand | Stack Effect     | Description    |
-|-------------|---------|------------------|----------------|
-| **NOP**     | none    | `[...] -> [...]` | No operation   |
-| **HALT**    | none    | `[...] -> [...]` | Stop execution |
+| Instruction | Operand | Stack Effect         | Description            |
+|-------------|---------|----------------------|------------------------|
+| **NOP**     | none    | `[...] -> [...]`     | No operation           |
+| **HALT**    | none    | `[...] -> [...]`     | Stop execution         |
+| **SYSCALL** | argc    | `[args...] -> [...]` | Call built-in function |
 
 ## Local Variables
 
@@ -215,10 +220,10 @@ Function: compute()
   Locals: a (index 0), b (index 1), c (index 2), d (index 3)
   
   Bytecode:
-    PUSH 10           ; Push 10
+    PUSH_IMM 10       ; Push 10
     STORE_LOCAL 0     ; a = 10
     
-    PUSH 20           ; Push 20
+    PUSH_IMM 20       ; Push 20
     STORE_LOCAL 1     ; b = 20
     
     LOAD_LOCAL 0      ; Push a
@@ -227,7 +232,7 @@ Function: compute()
     STORE_LOCAL 2     ; c = a + b
     
     LOAD_LOCAL 2      ; Push c
-    PUSH 2            ; Push 2
+    PUSH_IMM 2        ; Push 2
     MUL               ; Compute c * 2
     STORE_LOCAL 3     ; d = c * 2
     
@@ -239,25 +244,15 @@ Function: compute()
 
 ### Global Data Storage
 
-Global variables, string literals, and array constants are stored in a **data blob** (managed by the `Executable`). This
-is not a traditional heap. It's a fixed, read-only section of memory allocated at executable load time.
+Global variables, string literals, and array constants are stored in a **data blob** (managed by the `Executable`). It's
+a fixed, read-only section of memory allocated at executable load time.
 
 ### How It Works
 
 1. **Allocation**: During code generation, call `Executable::insert_data(id, bytes, name)` to store data.
-2. **Reference**: Use `PUSH data_id` to push the data section ID onto the stack.
+2. **Reference**: Use `PUSH_HEAP_REF data_id` to push the data section ID onto the stack.
 3. **Resolution**: The linker resolves the data ID to a memory address via the `RelocationTable`.
 4. **Access**: Use `LOAD` or `STORE` to read from or write to the resolved address.
-
-### Example: Global String
-
-```
-Data section ID: 0 contains "hello" (5 bytes at address 1000)
-
-Bytecode:
-  PUSH 0      ; Push data_id (section 0)
-  LOAD        ; Resolve to address 1000, push first byte of "hello"
-```
 
 ## Labels and Jumps
 
@@ -276,17 +271,17 @@ Condition: x > 5
 
 Bytecode:
   LOAD_LOCAL 0    ; Push x
-  PUSH 5          ; Push 5
+  PUSH_IMM 5      ; Push 5
   GT              ; Pop both, push (x > 5) as 1 or 0
   JMPF else_label ; If false (0), jump to else
 
   ; Then branch
-  PUSH 10
+  PUSH_IMM 10
   JMP end_label
 
   ; Else branch
   else_label:
-  PUSH 20
+  PUSH_IMM 20
 
   end_label:
   ; Continue (value is on stack)
@@ -294,14 +289,10 @@ Bytecode:
 
 ## Instruction Encoding
 
-### Fixed 5-Byte Format
+### Format
 
-Each instruction is encoded as **5 bytes**:
-
-| Bytes | Size    | Content                      |
-|-------|---------|------------------------------|
-| 0     | 1 byte  | Opcode (u8)                  |
-| 1–4   | 4 bytes | Operand (i32, little-endian) |
+Instructions that doesn't have operand encoded as `[Opcode (u8)]`
+Instructions that need operand encoded as `[Opcode (u8)][Operand (i32)]`
 
 ## Executable Format
 

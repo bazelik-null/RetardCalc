@@ -179,7 +179,7 @@ impl<'a> Parser<'a> {
 
     fn error(&mut self, message: &str, token: Token) {
         let err = CompilerError::new(
-            message.to_string(),
+            ("SyntaxError: ".to_string() + message).to_string(),
             "Parser".to_string(),
             token.line,
             token.column,

@@ -281,7 +281,11 @@ impl<'a> CodeGenerator<'a> {
         self.generate_node(body)?;
 
         // Emit return instruction if not present (implicit return)
-        self.emit(RET, 0);
+        if let Some(instr) = self.instructions.last()
+            && instr.opcode != RET
+        {
+            self.emit(RET, 0);
+        }
 
         // Restore parent scope
         let func_scope = std::mem::take(&mut self.scope);

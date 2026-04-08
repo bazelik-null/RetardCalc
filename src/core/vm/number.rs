@@ -157,7 +157,7 @@ impl Value {
                 "integer".to_string(),
             )),
             Value::StackRef { .. } => Err(VmError::TypeMismatch(
-                "reference".to_string(),
+                "stack reference".to_string(),
                 "integer".to_string(),
             )),
         }

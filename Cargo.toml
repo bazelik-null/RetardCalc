@@ -6,7 +6,6 @@ edition = "2024"
 [[bin]]
 name = "morsel"
 path = "src/bin/morsel.rs"
-required-features = ["vm_debug"]
 
 [[bin]]
 name = "morsel_vm"
@@ -15,9 +14,6 @@ path = "src/bin/morsel_vm.rs"
 [lib]
 name = "morsel_core"
 path = "src/lib.rs"
-
-[features]
-vm_debug = []
 
 # Reduce binary size
 [profile.release]

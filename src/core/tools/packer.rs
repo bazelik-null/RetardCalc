@@ -1,4 +1,3 @@
-// src/packer.rs
 use crate::core::shared::executable::Executable;
 use std::fs::File;
 use std::io::Write;

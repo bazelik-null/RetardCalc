@@ -293,16 +293,25 @@ fn handle_build_and_pack(source_path: &str, output_path: &str) -> io::Result<()>
 fn pack(source_path: &str, output_path: &str) -> io::Result<()> {
     validate_extension(source_path, EXE_EXTENSION)?;
 
+    let pack_time = Instant::now();
     let executable = read_and_deserialize_executable(source_path)?;
 
     let packer = Packer::new(executable, output_path.to_string());
-
     packer.pack().map_err(io::Error::other)?;
 
     println!(
         "{}",
         format!("[INFO]: Packed executable saved to {}", output_path).green()
     );
+    println!(
+        "{}",
+        format!(
+            "[INFO]: Packing took {:.2}ms",
+            pack_time.elapsed().as_secs_f64() * 1000.0
+        )
+        .green()
+    );
+
     Ok(())
 }
 

@@ -11,7 +11,7 @@
 # Introduction
 
 **Morsel** is an **interpreted** programming language built in **Rust** as my first Rust project. It combines memory
-safety of GC languages with type safety of Rust with an easy, expression-based syntax inspired by C, Go, and Rust
+safety of GC languages with type safety of Rust with an easy, expression-based syntax inspired by Python, Go, and Rust
 itself.
 
 ## Why Morsel?
@@ -117,7 +117,7 @@ cargo build -r
 - [x] Parser
 - [x] Semantic analyzer
 - [x] Type safety
-- [ ] Type casting
+- [x] Type casting
 - [x] Bytecode specification
 - [x] Compiler
 - [x] Math expressions

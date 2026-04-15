@@ -25,6 +25,7 @@ pub enum VmError {
     InvalidExecutable,
     CorruptedObject(String),
     GcError(String),
+    ArgumentCountMismatch(String),
 }
 
 impl VmError {
@@ -75,6 +76,9 @@ impl fmt::Display for VmError {
             VmError::InvalidExecutable => write!(f, "Invalid executable"),
             VmError::CorruptedObject(addr) => write!(f, "Corrupted object at: {}", addr),
             VmError::GcError(err) => write!(f, "Garbage collector error: {}", err),
+            VmError::ArgumentCountMismatch(expected) => {
+                write!(f, "Too many arguments for: {}", expected)
+            }
         }
     }
 }

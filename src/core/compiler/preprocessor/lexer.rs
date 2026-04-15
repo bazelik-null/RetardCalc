@@ -279,6 +279,11 @@ impl<'a> Lexer<'a> {
 
     /// Parses keywords
     fn parse_keyword(&mut self, string: &str) -> Option<KeywordValue> {
+        // Check if a cast
+        if self.peek() == '(' {
+            return None;
+        }
+
         match string {
             // Variables
             "let" => Some(KeywordValue::VariableDecl),

@@ -1,0 +1,16 @@
+func main() {
+    // Get user input
+    let input = input()
+    // Cast string to int
+    let value = int(input)
+
+    // Check if even or odd
+    let output = if (value % 2 == 0) {
+        "Even"
+    } else {
+        "Odd"
+    }
+
+    // Print result
+    println(output)
+}

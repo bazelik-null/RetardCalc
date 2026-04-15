@@ -8,10 +8,10 @@ func main() {
     prompt(ref mut password, "password")
 
     // Check login and password
-    if (login != get_login() || password != get_password()) {
-        println("Incorrect login or password")
-    } else {
+    if (auth(login, password)) {
         println("Welcome!")
+    } else {
+        println("Incorrect login or password")
     }
 }
 
@@ -20,18 +20,18 @@ func prompt(input_buf: ref mut string, option: string) {
     deref input_buf = input("> ")
 }
 
-func get_login(): string {
-    // Original: bazya
-    // XOR key: AUTISM
-    let obfuscated = "\x23\x34\x2e\x30\x32"
-    let key = "AUTISM"
-    return obfuscated ^^ key
-}
+func auth(login: string, password: string): bool {
+    // Key: bazya
+    // XOR key: memorysafe
+    let secret = "\x0f\x04\x17\x16\x13"
 
-func get_password(): string {
-    // Original: memorysafe
-    // XOR key: "AUTISM"
-    let obfuscated = "\x2c\x30\x39\x26\x21\x34\x32\x34\x32\x2c"
-    let key = "AUTISM"
-    return obfuscated ^^ key
+    // XOR login against password
+    let key = login ^^ password;
+
+    // Check if key is equal to secret
+    if (key == secret) {
+        true
+    } else {
+        false
+    }
 }

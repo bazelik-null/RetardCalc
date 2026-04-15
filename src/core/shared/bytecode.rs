@@ -166,7 +166,7 @@ impl Instruction {
         out
     }
 
-    /// Decode instruction from 5-byte fixed format.
+    /// Decode instruction
     pub fn decode(bytes: &[u8]) -> Result<(Self, usize), String> {
         if bytes.is_empty() {
             return Err("Empty byte slice".to_string());

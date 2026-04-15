@@ -301,6 +301,15 @@ impl VirtualMachine {
                         let bytes = self.extract_4_bytes(data, addr)?;
                         Ok(Number::Float(f32::from_le_bytes(bytes)))
                     }
+                    Type::String => {
+                        let string = self.value_to_string(value)?;
+
+                        let number = string
+                            .parse::<f32>()
+                            .map_err(|_| VmError::type_mismatch("numeric", "string"))?;
+
+                        Ok(Number::from_f32(number))
+                    }
                     _ => Err(VmError::type_mismatch(
                         "numeric",
                         format!("ref(0x{:x})", addr),
@@ -319,28 +328,15 @@ impl VirtualMachine {
         }
     }
 
-    /// Extract 4 bytes from data
-    fn extract_4_bytes(&self, data: &[u8], addr: usize) -> Result<[u8; 4], VmError> {
-        if data.len() < 4 {
-            return Err(VmError::type_mismatch(
-                "4 bytes",
-                format!("small data at 0x{:x}", addr),
-            ));
-        }
-        let mut arr = [0u8; 4];
-        arr.copy_from_slice(&data[0..4]);
-        Ok(arr)
-    }
-
     /// Convert a stack Value into a string
-    fn value_to_string(&mut self, value: &Value) -> Result<String, VmError> {
+    fn value_to_string(&mut self, value: Value) -> Result<String, VmError> {
         match value {
             Value::Ref(addr) => {
-                let (ty, data) = self.heap_get_type_and_data(*addr)?;
+                let (ty, data) = self.heap_get_type_and_data(addr)?;
                 if ty == Type::String {
                     Ok(std::str::from_utf8(data).unwrap_or_default().to_string())
                 } else {
-                    match self.value_to_num(Value::Ref(*addr))? {
+                    match self.value_to_num(Value::Ref(addr))? {
                         Number::Int(i) => Ok(i.to_string()),
                         Number::Float(f) => Ok(f.to_string()),
                     }
@@ -353,10 +349,68 @@ impl VirtualMachine {
             } => {
                 let data = self
                     .memory
-                    .dereference_stack_ref(*frame_index, *local_index)?;
-                self.value_to_string(&data)
+                    .dereference_stack_ref(frame_index, local_index)?;
+                self.value_to_string(data)
             }
         }
+    }
+
+    /// Convert a stack Value into a boolean
+    fn value_to_bool(&mut self, value: Value) -> Result<bool, VmError> {
+        match value {
+            Value::Imm(i) => {
+                if i.to_i32() != 0 {
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
+            Value::Ref(addr) => {
+                let (ty, data) = self.heap_get_type_and_data(addr)?;
+                if ty == Type::String {
+                    if data.len() > 1 { Ok(true) } else { Ok(false) }
+                } else {
+                    match self.value_to_num(Value::Ref(addr))? {
+                        Number::Int(i) => {
+                            if i != 0 {
+                                Ok(true)
+                            } else {
+                                Ok(false)
+                            }
+                        }
+                        Number::Float(f) => {
+                            if f != 0f32 {
+                                Ok(true)
+                            } else {
+                                Ok(false)
+                            }
+                        }
+                    }
+                }
+            }
+            Value::StackRef {
+                frame_index,
+                local_index,
+            } => {
+                let data = self
+                    .memory
+                    .dereference_stack_ref(frame_index, local_index)?;
+                self.value_to_bool(data)
+            }
+        }
+    }
+
+    /// Extract 4 bytes from data
+    fn extract_4_bytes(&self, data: &[u8], addr: usize) -> Result<[u8; 4], VmError> {
+        if data.len() < 4 {
+            return Err(VmError::type_mismatch(
+                "4 bytes",
+                format!("small data at 0x{:x}", addr),
+            ));
+        }
+        let mut arr = [0u8; 4];
+        arr.copy_from_slice(&data[0..4]);
+        Ok(arr)
     }
 
     /// Build data for heap

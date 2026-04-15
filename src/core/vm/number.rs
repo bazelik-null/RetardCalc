@@ -127,6 +127,14 @@ impl Number {
             Number::Float(f) => f as i32,
         }
     }
+
+    pub fn from_f32(value: f32) -> Self {
+        if value.fract() == 0.0 {
+            Number::Int(value as i32)
+        } else {
+            Number::Float(value)
+        }
+    }
 }
 
 impl Display for Number {

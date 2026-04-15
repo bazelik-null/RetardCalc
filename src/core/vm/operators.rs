@@ -79,8 +79,8 @@ impl VirtualMachine {
             }
             _ => {
                 // Fall back to string concatenation
-                let sa = self.value_to_string(&va)?;
-                let sb = self.value_to_string(&vb)?;
+                let sa = self.value_to_string(va)?;
+                let sb = self.value_to_string(vb)?;
 
                 let (rtti, data) = self.concat_string(&sa, &sb)?;
                 let addr = self.memory.save_to_heap(&rtti, &data, false)?;
@@ -250,8 +250,8 @@ impl VirtualMachine {
             }
             _ => {
                 // Fall back to string operation
-                let sa = self.value_to_string(&va)?;
-                let sb = self.value_to_string(&vb)?;
+                let sa = self.value_to_string(va)?;
+                let sb = self.value_to_string(vb)?;
 
                 let result = self.xor_strings(&sa, &sb)?;
 
@@ -388,14 +388,16 @@ impl VirtualMachine {
             SysCallId::Print => self.op_print(&args),
             SysCallId::Println => self.op_println(&args),
             SysCallId::Input => self.op_input(&args),
-        }?;
-
-        Ok(())
+            SysCallId::Int => self.op_cast_int(&args),
+            SysCallId::Float => self.op_cast_float(&args),
+            SysCallId::String => self.op_cast_string(&args),
+            SysCallId::Bool => self.op_cast_bool(&args),
+        }
     }
 
     fn op_print(&mut self, args: &[Value]) -> Result<(), VmError> {
         for val in args {
-            let s = self.value_to_string(val)?;
+            let s = self.value_to_string(*val)?;
             print!("{}", s);
             io::stdout().flush().unwrap();
         }
@@ -404,7 +406,7 @@ impl VirtualMachine {
 
     fn op_println(&mut self, args: &[Value]) -> Result<(), VmError> {
         for val in args {
-            let s = self.value_to_string(val)?;
+            let s = self.value_to_string(*val)?;
             println!("{}", s);
         }
         Ok(())
@@ -426,8 +428,54 @@ impl VirtualMachine {
         let addr = self.memory.save_to_heap(&rtti, &data, false)?;
 
         // Push reference to stack
-        self.push_ref(addr)?;
+        self.push_ref(addr)
+    }
 
-        Ok(())
+    fn op_cast_int(&mut self, args: &[Value]) -> Result<(), VmError> {
+        if args.len() > 1 {
+            return Err(VmError::ArgumentCountMismatch("int".to_string()));
+        }
+
+        let val = self.value_to_num(args[0])?.to_i32();
+
+        self.push_num(Number::Int(val))
+    }
+
+    fn op_cast_float(&mut self, args: &[Value]) -> Result<(), VmError> {
+        if args.len() > 1 {
+            return Err(VmError::ArgumentCountMismatch("float".to_string()));
+        }
+
+        let val = self.value_to_num(args[0])?.to_f32();
+
+        self.push_num(Number::Float(val))
+    }
+
+    fn op_cast_string(&mut self, args: &[Value]) -> Result<(), VmError> {
+        if args.len() > 1 {
+            return Err(VmError::ArgumentCountMismatch("string".to_string()));
+        }
+
+        let val = self.value_to_string(args[0])?;
+
+        // Save data to heap
+        let (rtti, data) = self.build_data(val, Type::String)?;
+        let addr = self.memory.save_to_heap(&rtti, &data, false)?;
+
+        self.push_ref(addr)
+    }
+
+    fn op_cast_bool(&mut self, args: &[Value]) -> Result<(), VmError> {
+        if args.len() > 1 {
+            return Err(VmError::ArgumentCountMismatch("bool".to_string()));
+        }
+
+        let val = self.value_to_bool(args[0])?;
+
+        if val {
+            self.push_num(Number::Int(1))
+        } else {
+            self.push_num(Number::Int(0))
+        }
     }
 }

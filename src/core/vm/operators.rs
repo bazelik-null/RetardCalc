@@ -28,7 +28,7 @@ macro_rules! shift_op {
             let va = self.memory.pop()?;
 
             // Get shift amount
-            let shift_amount = match self.value_to_num(vb) {
+            let shift_amount = match self.value_to_num(vb, false) {
                 Ok(Number::Int(i)) if i >= 0 => i as u32,
                 Ok(Number::Float(f)) if f >= 0.0 && f.fract() == 0.0 => f as u32,
                 _ => {
@@ -40,7 +40,7 @@ macro_rules! shift_op {
             };
 
             // Perform shift
-            match self.value_to_num(va) {
+            match self.value_to_num(va, false) {
                 Ok(Number::Int(i)) => {
                     self.push_num(Number::Int($shift_fn(i, shift_amount)))?;
                 }
@@ -71,7 +71,7 @@ impl VirtualMachine {
         let va = self.memory.pop()?;
 
         // Try numeric operation first
-        match (self.value_to_num(va), self.value_to_num(vb)) {
+        match (self.value_to_num(va, false), self.value_to_num(vb, false)) {
             (Ok(na), Ok(nb)) => {
                 let result = na.add(nb);
                 self.push_num(result)?;
@@ -143,7 +143,7 @@ impl VirtualMachine {
     }
 
     fn check_divisor(&mut self, value: Value) -> Result<(), VmError> {
-        if let Ok(value) = self.value_to_num(value) {
+        if let Ok(value) = self.value_to_num(value, false) {
             match value {
                 Number::Int(0) => Err(VmError::type_mismatch("non-zero", "divisor")),
                 Number::Float(0.0) => Err(VmError::type_mismatch("non-zero", "divisor")),
@@ -227,7 +227,7 @@ impl VirtualMachine {
         let va = self.memory.pop()?;
 
         // Try numeric operation first
-        match (self.value_to_num(va), self.value_to_num(vb)) {
+        match (self.value_to_num(va, false), self.value_to_num(vb, false)) {
             (Ok(na), Ok(nb)) => {
                 let result = match (na, nb) {
                     (Number::Int(a), Number::Int(b)) => Number::Int(a ^ b),
@@ -436,7 +436,7 @@ impl VirtualMachine {
             return Err(VmError::ArgumentCountMismatch("int".to_string()));
         }
 
-        let val = self.value_to_num(args[0])?.to_i32();
+        let val = self.value_to_num(args[0], true)?.to_i32();
 
         self.push_num(Number::Int(val))
     }
@@ -446,7 +446,7 @@ impl VirtualMachine {
             return Err(VmError::ArgumentCountMismatch("float".to_string()));
         }
 
-        let val = self.value_to_num(args[0])?.to_f32();
+        let val = self.value_to_num(args[0], true)?.to_f32();
 
         self.push_num(Number::Float(val))
     }

@@ -334,7 +334,7 @@ impl Memory {
         self.heap[addr + 4..addr + 12].copy_from_slice(rtti); // RTTI (8 bytes)
         self.heap[addr + 12..addr + 16].copy_from_slice(&(data.len() as u32).to_le_bytes()); // Data length (4 bytes)
 
-        // Cache header to avoid redundant reads
+        // Cache header
         self.header_cache
             .insert(addr, (total_size as u32, is_static));
 

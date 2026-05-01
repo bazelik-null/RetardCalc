@@ -280,14 +280,14 @@ impl VirtualMachine {
 
     /// Require an integer value (Value::Int or ref to Integer)
     pub fn require_int_value(&mut self, value: Value) -> Result<i32, VmError> {
-        match self.value_to_num(value)? {
+        match self.value_to_num(value, false)? {
             Number::Int(i) => Ok(i),
             Number::Float(f) => Err(VmError::type_mismatch("integer", format!("{}", f))),
         }
     }
 
     /// Convert a stack Value or reference into a numeric Number (int or float)
-    fn value_to_num(&mut self, value: Value) -> Result<Number, VmError> {
+    fn value_to_num(&mut self, value: Value, parse_string: bool) -> Result<Number, VmError> {
         match value {
             Value::Imm(i) => Ok(i),
             Value::Ref(addr) => {
@@ -301,7 +301,7 @@ impl VirtualMachine {
                         let bytes = self.extract_4_bytes(data, addr)?;
                         Ok(Number::Float(f32::from_le_bytes(bytes)))
                     }
-                    Type::String => {
+                    Type::String if parse_string => {
                         let string = self.value_to_string(value)?;
 
                         let number = string
@@ -336,7 +336,7 @@ impl VirtualMachine {
                 if ty == Type::String {
                     Ok(std::str::from_utf8(data).unwrap_or_default().to_string())
                 } else {
-                    match self.value_to_num(Value::Ref(addr))? {
+                    match self.value_to_num(Value::Ref(addr), false)? {
                         Number::Int(i) => Ok(i.to_string()),
                         Number::Float(f) => Ok(f.to_string()),
                     }
@@ -370,7 +370,7 @@ impl VirtualMachine {
                 if ty == Type::String {
                     if data.len() > 1 { Ok(true) } else { Ok(false) }
                 } else {
-                    match self.value_to_num(Value::Ref(addr))? {
+                    match self.value_to_num(Value::Ref(addr), false)? {
                         Number::Int(i) => {
                             if i != 0 {
                                 Ok(true)
